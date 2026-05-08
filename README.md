@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dinemate
 
-## Getting Started
+An editorial meal planner for UNC Chapel Hill. Tell it your goals; it returns a 7-day plan built from real Carolina Dining Services menus.
 
-First, run the development server:
+By **Sid Subramanian**, powered by **Next.js**.
+
+## Stack
+
+- Next.js 16 · App Router · TypeScript
+- Tailwind CSS v4 + Fraunces (display) / Geist (sans/mono)
+- `cheerio` for scraping `dining.unc.edu`
+- Mifflin-St Jeor BMR + activity multiplier + goal delta
+- Greedy beam-search optimizer over the menu
+
+## Develop
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run scrape          # refresh src/data/menu.json (today's date)
+npm run scrape 2026-09-01   # specific date
+npm run dev             # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deploy (Vercel)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Push to GitHub.
+2. Import into Vercel — framework is auto-detected as Next.js.
+3. Set `NEXT_PUBLIC_SITE_URL` to your production URL (e.g. `https://dinemate.app`). This is used for OG image, sitemap, and canonical URLs.
+4. Build and deploy.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The menu cache (`src/data/menu.json`) is **bundled at build time**. To refresh:
 
-## Learn More
+```bash
+npm run scrape && git commit -am "refresh menu" && git push
+```
 
-To learn more about Next.js, take a look at the following resources:
+A redeploy regenerates the plan with the new data. For automated daily refreshes, hook a GitHub Action up to a Vercel Deploy Hook that runs `npm run scrape` on a cron, commits, and triggers a rebuild.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project layout
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+  app/
+    layout.tsx                root layout, fonts, metadata
+    page.tsx                  landing -> wizard -> plan flow
+    opengraph-image.tsx       generated OG image (edge runtime)
+    icon.tsx, apple-icon.tsx  generated favicons
+    robots.ts, sitemap.ts     SEO
+    api/plan/route.ts         POST -> PlanResult
+  components/
+    OnboardingWizard.tsx      4-step form (vitals -> activity -> goal -> diet)
+    PlanView.tsx              7-day plan, magazine-style
+    ui/                       Button, Card, Input, Stat, SegmentedControl, Chip, Progress
+  lib/
+    nutrition.ts              Mifflin-St Jeor + macro math
+    optimizer.ts              greedy meal picker
+    scraper.ts                cheerio-based UNC dining scraper
+    types.ts                  shared types
+  data/
+    menu.json                 cached menu (regenerate with `npm run scrape`)
+scripts/
+  scrape.ts                   CLI runner for the scraper
+```
 
-## Deploy on Vercel
+## Notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dinemate is an independent project. Not affiliated with the University of North Carolina at Chapel Hill or Carolina Dining Services. Calorie targets are estimates intended for general guidance, not medical advice.
