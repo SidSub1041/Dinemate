@@ -36,21 +36,21 @@ export default function Page() {
         {state.phase === "landing" && (
           <Landing onStart={() => setState({ phase: "wizard" })} />
         )}
-        {state.phase !== "landing" && (
+        {state.phase === "wizard" && (
           <div className="container mx-auto px-5 sm:px-8 py-10 sm:py-16">
-            {state.phase === "wizard" && (
-              <OnboardingWizard
-                onComplete={(plan, profile) =>
-                  setState({ phase: "plan", plan, profile })
-                }
-              />
-            )}
-            {state.phase === "plan" && (
-              <PlanView
-                plan={state.plan}
-                onRestart={() => setState({ phase: "wizard" })}
-              />
-            )}
+            <OnboardingWizard
+              onComplete={(plan, profile) =>
+                setState({ phase: "plan", plan, profile })
+              }
+            />
+          </div>
+        )}
+        {state.phase === "plan" && (
+          <div className="pb-16">
+            <PlanView
+              plan={state.plan}
+              onRestart={() => setState({ phase: "wizard" })}
+            />
           </div>
         )}
       </main>

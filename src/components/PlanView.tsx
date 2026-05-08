@@ -1,18 +1,35 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { RotateCcw, MapPin, Sun, Moon, Sunset } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatNumber } from "@/lib/utils";
+import { PLAN_COVER } from "@/lib/images";
 import type { MealPeriod, MealSelection, PlanResult } from "@/lib/types";
 
 const MEAL_META: Record<
   Exclude<MealPeriod, "late_lunch">,
-  { label: string; icon: typeof Sun; numeral: string }
+  { label: string; icon: typeof Sun; numeral: string; mood: string }
 > = {
-  breakfast: { label: "Breakfast", icon: Sun, numeral: "I." },
-  lunch: { label: "Lunch", icon: Sunset, numeral: "II." },
-  dinner: { label: "Dinner", icon: Moon, numeral: "III." },
+  breakfast: {
+    label: "Breakfast",
+    icon: Sun,
+    numeral: "I.",
+    mood: "the start",
+  },
+  lunch: {
+    label: "Lunch",
+    icon: Sunset,
+    numeral: "II.",
+    mood: "midday",
+  },
+  dinner: {
+    label: "Dinner",
+    icon: Moon,
+    numeral: "III.",
+    mood: "to close",
+  },
 };
 
 interface Props {
@@ -26,122 +43,164 @@ export function PlanView({ plan, onRestart }: Props) {
   const t = plan.targets;
 
   return (
-    <div className="w-full max-w-6xl mx-auto animate-fade-up space-y-12">
-      {/* Masthead */}
-      <header className="space-y-6">
-        <div className="rule-double" />
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <div className="eyebrow text-foreground/60">
-              The week ahead, in calories
-            </div>
-            <h1 className="font-display text-5xl sm:text-7xl font-medium tracking-tight leading-[0.95] mt-2">
-              Your <span className="italic">prescription</span>
-            </h1>
-          </div>
-          <Button variant="outline" onClick={onRestart} size="sm">
-            <RotateCcw className="size-3.5" strokeWidth={1.5} />
-            Start over
-          </Button>
-        </div>
-        <div className="rule" />
+    <div className="w-full animate-fade-up space-y-12">
+      {/* Cover band */}
+      <PlanCover totals={t} onRestart={onRestart} />
 
-        {/* Daily targets — newspaper-style */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-foreground/15 border-y border-foreground/15 -mx-2">
-          <TargetCell
+      <div className="max-w-6xl mx-auto px-1 sm:px-0 space-y-12">
+        {/* Day index — like a TV guide */}
+        <section className="space-y-4 scroll-mt-20">
+          <div className="flex items-baseline justify-between">
+            <h2 className="eyebrow text-foreground/60">The week</h2>
+            <span className="text-xs text-muted-foreground italic">
+              seven days, drawn from today&apos;s rotation
+            </span>
+          </div>
+          <div className="grid grid-cols-7 border border-foreground">
+            {plan.days.map((d, i) => (
+              <button
+                key={`${d.day}-${i}`}
+                onClick={() => setActiveDay(i)}
+                className={cn(
+                  "flex flex-col items-start gap-1 px-3 py-3 text-left transition-colors border-r border-foreground last:border-r-0 cursor-pointer relative",
+                  activeDay === i
+                    ? "bg-foreground text-paper"
+                    : "bg-paper text-foreground hover:bg-foreground/5"
+                )}
+              >
+                {activeDay === i && (
+                  <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-carolina" />
+                )}
+                <span
+                  className={cn(
+                    "eyebrow text-[9px]",
+                    activeDay === i ? "text-paper/60" : "text-foreground/50"
+                  )}
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="font-display text-base sm:text-lg leading-none tracking-tight">
+                  {d.day.slice(0, 3)}
+                </span>
+                <span
+                  className={cn(
+                    "hidden sm:block text-[10px] font-mono-tabular leading-tight",
+                    activeDay === i ? "text-paper/70" : "text-muted-foreground"
+                  )}
+                >
+                  {Math.round(d.totals.calories)} k
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <DayBreakdown day={day} targets={t} />
+
+        <footer className="pt-8 border-t border-foreground/20 text-xs text-muted-foreground italic">
+          Calorie targets are estimates. Portion guidance is based on the
+          dining hall&apos;s published serving size — adjust to your hunger,
+          not the chart.
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function PlanCover({
+  totals: t,
+  onRestart,
+}: {
+  totals: PlanResult["targets"];
+  onRestart: () => void;
+}) {
+  return (
+    <section className="relative border-b border-foreground bg-carolina-deep text-paper overflow-hidden">
+      {/* Background image */}
+      <div className="absolute inset-0">
+        <Image
+          src={PLAN_COVER.src}
+          alt={PLAN_COVER.alt}
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover opacity-25"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-carolina-deep via-carolina-deep/85 to-carolina-deep/55" />
+      </div>
+
+      <div className="relative container mx-auto px-5 sm:px-8 py-12 sm:py-16 grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-8 items-end">
+        <div className="lg:col-span-8 space-y-5">
+          <div className="flex items-center gap-3">
+            <span className="size-2 rounded-full bg-carolina" />
+            <span className="eyebrow text-paper/65">
+              The Plan · Issued for you
+            </span>
+          </div>
+          <h1 className="font-display text-5xl sm:text-7xl font-medium leading-[0.95] tracking-tight">
+            Your <span className="italic font-display-wonk">prescription</span>
+            <span className="text-carolina">.</span>
+          </h1>
+          <p className="text-paper/80 max-w-lg text-base sm:text-lg leading-relaxed">
+            Seven days of breakfast, lunch and dinner — pulled from real
+            Carolina Dining Services menus and tuned to your numbers.
+          </p>
+        </div>
+
+        <div className="lg:col-span-4 space-y-3">
+          <Button
+            variant="secondary"
+            onClick={onRestart}
+            size="sm"
+            className="bg-paper text-foreground hover:bg-paper/90 border-paper"
+          >
+            <RotateCcw className="size-3.5" strokeWidth={1.5} />
+            Edit my profile
+          </Button>
+          <div className="text-[11px] font-mono-tabular text-paper/65 space-x-4">
+            <span>
+              <span className="eyebrow text-paper/45 mr-1">BMR</span>
+              {formatNumber(t.bmr)}
+            </span>
+            <span>
+              <span className="eyebrow text-paper/45 mr-1">TDEE</span>
+              {formatNumber(t.tdee)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Daily targets on a band below */}
+      <div className="relative border-t border-paper/20">
+        <div className="container mx-auto px-5 sm:px-8 grid grid-cols-2 sm:grid-cols-4 divide-x divide-paper/15">
+          <CoverCell
             label="Calories / day"
             value={formatNumber(t.calories)}
             unit="kcal"
             primary
           />
-          <TargetCell
+          <CoverCell
             label="Protein"
             value={t.proteinG}
-            unit={`g  •  ${formatNumber(t.proteinG * 4)} kcal`}
+            unit="grams"
           />
-          <TargetCell
+          <CoverCell
             label="Carbs"
             value={t.carbsG}
-            unit={`g  •  ${formatNumber(t.carbsG * 4)} kcal`}
+            unit="grams"
           />
-          <TargetCell
+          <CoverCell
             label="Fat"
             value={t.fatG}
-            unit={`g  •  ${formatNumber(t.fatG * 9)} kcal`}
+            unit="grams"
           />
         </div>
-
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-xs text-muted-foreground">
-          <span>
-            <span className="eyebrow text-foreground/50 mr-1.5">BMR</span>
-            <span className="font-mono-tabular">{formatNumber(t.bmr)} kcal</span>
-          </span>
-          <span>
-            <span className="eyebrow text-foreground/50 mr-1.5">TDEE</span>
-            <span className="font-mono-tabular">{formatNumber(t.tdee)} kcal</span>
-          </span>
-          <span>
-            <span className="eyebrow text-foreground/50 mr-1.5">Source</span>
-            Carolina Dining Services menus
-          </span>
-        </div>
-      </header>
-
-      {/* Day index — like a TV guide */}
-      <section className="space-y-4 scroll-mt-20">
-        <div className="flex items-baseline justify-between">
-          <h2 className="eyebrow text-foreground/60">The week</h2>
-          <span className="text-xs text-muted-foreground italic">
-            seven days, drawn from today&apos;s rotation
-          </span>
-        </div>
-        <div className="grid grid-cols-7 border border-foreground">
-          {plan.days.map((d, i) => (
-            <button
-              key={`${d.day}-${i}`}
-              onClick={() => setActiveDay(i)}
-              className={cn(
-                "flex flex-col items-start gap-1 px-3 py-3 text-left transition-colors border-r border-foreground last:border-r-0 cursor-pointer",
-                activeDay === i
-                  ? "bg-foreground text-paper"
-                  : "bg-paper text-foreground hover:bg-foreground/5"
-              )}
-            >
-              <span
-                className={cn(
-                  "eyebrow text-[9px]",
-                  activeDay === i ? "text-paper/60" : "text-foreground/50"
-                )}
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="font-display text-base sm:text-lg leading-none tracking-tight">
-                {d.day.slice(0, 3)}
-              </span>
-              <span
-                className={cn(
-                  "hidden sm:block text-[10px] font-mono-tabular leading-tight",
-                  activeDay === i ? "text-paper/70" : "text-muted-foreground"
-                )}
-              >
-                {Math.round(d.totals.calories)} k
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <DayBreakdown day={day} targets={t} />
-
-      <footer className="pt-8 border-t border-foreground/20 text-xs text-muted-foreground italic">
-        Calorie targets are estimates. Portion guidance is based on the dining
-        hall&apos;s published serving size — adjust to your hunger, not the chart.
-      </footer>
-    </div>
+      </div>
+    </section>
   );
 }
 
-function TargetCell({
+function CoverCell({
   label,
   value,
   unit,
@@ -154,11 +213,11 @@ function TargetCell({
 }) {
   return (
     <div className="px-3 py-5 sm:px-5">
-      <div className="eyebrow text-foreground/55">{label}</div>
+      <div className="eyebrow text-paper/55">{label}</div>
       <div className="mt-2 flex items-baseline gap-1.5">
         <span
           className={cn(
-            "font-display font-medium leading-none tracking-tight tabular-nums",
+            "font-display font-medium leading-none tracking-tight tabular-nums text-paper",
             primary ? "text-4xl sm:text-5xl" : "text-3xl sm:text-4xl"
           )}
         >
@@ -166,7 +225,7 @@ function TargetCell({
         </span>
       </div>
       {unit && (
-        <div className="text-[11px] text-muted-foreground mt-1.5 font-mono-tabular">
+        <div className="text-[11px] text-paper/55 mt-1.5 font-mono-tabular">
           {unit}
         </div>
       )}
@@ -201,24 +260,28 @@ function DayBreakdown({
             actual={day.totals.calories}
             target={targets.calories}
             unit="kcal"
+            barColor="bg-carolina"
           />
           <MacroLine
             label="Protein"
             actual={day.totals.proteinG}
             target={targets.proteinG}
             unit="g"
+            barColor="bg-foreground"
           />
           <MacroLine
             label="Carbs"
             actual={day.totals.totalCarbsG}
             target={targets.carbsG}
             unit="g"
+            barColor="bg-carolina-deep"
           />
           <MacroLine
             label="Fat"
             actual={day.totals.totalFatG}
             target={targets.fatG}
             unit="g"
+            barColor="bg-accent"
           />
         </div>
       </section>
@@ -237,11 +300,13 @@ function MacroLine({
   actual,
   target,
   unit,
+  barColor,
 }: {
   label: string;
   actual: number;
   target: number;
   unit: string;
+  barColor: string;
 }) {
   const delta = actual - target;
   const pct = target > 0 ? (actual / target) * 100 : 0;
@@ -268,9 +333,9 @@ function MacroLine({
           / {Math.round(target)} {unit}
         </span>
       </div>
-      <div className="h-px bg-foreground/10 relative">
+      <div className="h-1.5 bg-foreground/10 relative">
         <div
-          className="absolute inset-y-0 left-0 bg-foreground"
+          className={cn("absolute inset-y-0 left-0", barColor)}
           style={{ width: `${Math.min(120, Math.max(0, pct))}%` }}
         />
         <div
@@ -289,16 +354,21 @@ function MealArticle({ meal }: { meal: MealSelection }) {
   return (
     <article className="grid grid-cols-1 sm:grid-cols-12 gap-6 sm:gap-10 pb-8 border-b border-foreground/15 last:border-0">
       <header className="sm:col-span-3">
-        <div className="flex items-baseline gap-3">
-          <span className="font-display italic text-3xl text-foreground/40 tabular-nums">
+        <div className="flex items-center gap-3">
+          <span className="font-display italic text-3xl text-carolina-deep/60 tabular-nums">
             {meta.numeral}
           </span>
-          <Icon className="size-4 text-foreground/60" strokeWidth={1.5} />
+          <span className="size-8 inline-flex items-center justify-center bg-carolina-tint text-carolina-deep rounded-full">
+            <Icon className="size-4" strokeWidth={1.5} />
+          </span>
         </div>
-        <h3 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight mt-1">
+        <h3 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight mt-2">
           {meta.label}
         </h3>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+        <div className="text-xs italic text-muted-foreground mt-0.5">
+          — {meta.mood}
+        </div>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-3">
           <MapPin className="size-3" strokeWidth={1.5} />
           <span>{meal.location}</span>
         </div>
