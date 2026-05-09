@@ -279,6 +279,24 @@ function buildMeal(
   };
 }
 
+/**
+ * Build a single meal selection for the given period, excluding any item recipe
+ * IDs the caller has already shown. Used by /api/regenerate-meal so the user can
+ * cycle through alternative options without rebuilding the entire week.
+ */
+export function buildSingleMeal(
+  data: MenuData,
+  profile: UserProfile,
+  targets: MacroTargets,
+  period: "breakfast" | "lunch" | "dinner",
+  excludeRecipeIds: string[],
+  variantSeed: number = Math.floor(Math.random() * 1000)
+): MealSelection {
+  const target = targetForMeal(period, targets);
+  const used = new Set<string>(excludeRecipeIds);
+  return buildMeal(data, period, target, profile, used, variantSeed);
+}
+
 const MEAL_SPLIT: Record<"breakfast" | "lunch" | "dinner", number> = {
   breakfast: 0.27,
   lunch: 0.36,

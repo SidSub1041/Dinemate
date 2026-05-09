@@ -33,7 +33,7 @@ import type {
   UserProfile,
 } from "@/lib/types";
 
-interface FormState {
+export interface FormState {
   age: number;
   sex: Sex;
   heightFt: number;
@@ -45,7 +45,23 @@ interface FormState {
   avoidAllergens: Allergen[];
 }
 
+export const DEFAULT_FORM: FormState = {
+  age: 20,
+  sex: "male",
+  heightFt: 5,
+  heightIn: 10,
+  weightLb: 160,
+  activity: null,
+  goal: null,
+  diet: "none",
+  avoidAllergens: [],
+};
+
 interface Props {
+  initialForm: FormState;
+  initialStep?: number;
+  onFormChange: (form: FormState) => void;
+  onStepChange?: (step: number) => void;
   onComplete: (plan: PlanResult, profile: UserProfile) => void;
 }
 
@@ -105,27 +121,33 @@ const STEPS: StepMeta[] = [
   },
 ];
 
-export function OnboardingWizard({ onComplete }: Props) {
-  const [step, setStep] = useState(1);
+export function OnboardingWizard({
+  initialForm,
+  initialStep = 1,
+  onFormChange,
+  onStepChange,
+  onComplete,
+}: Props) {
+  const [step, setStepLocal] = useState(initialStep);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>({
-    age: 20,
-    sex: "male",
-    heightFt: 5,
-    heightIn: 10,
-    weightLb: 160,
-    activity: null,
-    goal: null,
-    diet: "none",
-    avoidAllergens: [],
-  });
+  const [form, setFormLocal] = useState<FormState>(initialForm);
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
+  // Always update local + parent in event handlers (never inside an updater),
+  // so React doesn't see a parent setState during a child render.
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    const next = { ...form, [key]: value };
+    setFormLocal(next);
+    onFormChange(next);
+  };
 
-  const next = () => setStep((s) => Math.min(STEPS.length, s + 1));
-  const back = () => setStep((s) => Math.max(1, s - 1));
+  const setStep = (s: number) => {
+    setStepLocal(s);
+    onStepChange?.(s);
+  };
+
+  const next = () => setStep(Math.min(STEPS.length, step + 1));
+  const back = () => setStep(Math.max(1, step - 1));
 
   const canAdvance = () => {
     if (step === 1)

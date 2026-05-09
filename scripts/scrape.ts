@@ -1,6 +1,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { scrapeMenuData } from "../src/lib/scraper";
+import { brandLocations } from "../src/lib/brand-items";
 
 function todayISO(): string {
   const d = new Date();
@@ -19,6 +20,14 @@ async function main() {
     concurrency: 10,
     onProgress: (msg) => console.log(msg),
   });
+
+  // Merge curated brand-restaurant items.
+  const brand = brandLocations();
+  data.locations.push(...brand);
+  console.log(
+    `Merged ${brand.length} brand restaurants ` +
+      `(${brand.reduce((n, l) => n + Object.values(l.meals).flat().length, 0)} item-slots).`
+  );
 
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, JSON.stringify(data, null, 2));

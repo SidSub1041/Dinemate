@@ -4,7 +4,11 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { OnboardingWizard } from "@/components/OnboardingWizard";
+import {
+  OnboardingWizard,
+  DEFAULT_FORM,
+  type FormState,
+} from "@/components/OnboardingWizard";
 import { PlanView } from "@/components/PlanView";
 import {
   HERO_FOOD,
@@ -20,8 +24,17 @@ type AppState =
   | { phase: "wizard" }
   | { phase: "plan"; plan: PlanResult; profile: UserProfile };
 
+function planUpdater(
+  setState: React.Dispatch<React.SetStateAction<AppState>>
+) {
+  return (newPlan: PlanResult) =>
+    setState((s) => (s.phase === "plan" ? { ...s, plan: newPlan } : s));
+}
+
 export default function Page() {
   const [state, setState] = useState<AppState>({ phase: "landing" });
+  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const [wizardStep, setWizardStep] = useState(1);
 
   useEffect(() => {
     if (state.phase !== "landing") {
@@ -39,6 +52,10 @@ export default function Page() {
         {state.phase === "wizard" && (
           <div className="container mx-auto px-5 sm:px-8 py-10 sm:py-16">
             <OnboardingWizard
+              initialForm={form}
+              initialStep={wizardStep}
+              onFormChange={setForm}
+              onStepChange={setWizardStep}
               onComplete={(plan, profile) =>
                 setState({ phase: "plan", plan, profile })
               }
@@ -49,7 +66,14 @@ export default function Page() {
           <div className="pb-16">
             <PlanView
               plan={state.plan}
-              onRestart={() => setState({ phase: "wizard" })}
+              profile={state.profile}
+              onPlanUpdate={planUpdater(setState)}
+              onRestart={() => {
+                // Drop the user back at step 4 so they're already at the
+                // diet/preferences screen ready to tweak — not at the start.
+                setWizardStep(4);
+                setState({ phase: "wizard" });
+              }}
             />
           </div>
         )}

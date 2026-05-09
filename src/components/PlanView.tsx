@@ -2,11 +2,26 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { RotateCcw, MapPin, Sun, Moon, Sunset } from "lucide-react";
+import {
+  RotateCcw,
+  MapPin,
+  Sun,
+  Moon,
+  Sunset,
+  Shuffle,
+  Calendar as CalendarIcon,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatNumber } from "@/lib/utils";
 import { PLAN_COVER } from "@/lib/images";
-import type { MealPeriod, MealSelection, PlanResult } from "@/lib/types";
+import { downloadICS } from "@/lib/calendar";
+import type {
+  MealPeriod,
+  MealSelection,
+  PlanResult,
+  UserProfile,
+} from "@/lib/types";
 
 const MEAL_META: Record<
   Exclude<MealPeriod, "late_lunch">,
@@ -34,21 +49,110 @@ const MEAL_META: Record<
 
 interface Props {
   plan: PlanResult;
+  profile: UserProfile;
   onRestart: () => void;
+  onPlanUpdate: (plan: PlanResult) => void;
 }
 
-export function PlanView({ plan, onRestart }: Props) {
+function recomputeDayTotals(
+  day: PlanResult["days"][number],
+  targets: PlanResult["targets"]
+): PlanResult["days"][number] {
+  const ZERO = {
+    servingSize: "",
+    calories: 0,
+    totalFatG: 0,
+    saturatedFatG: 0,
+    transFatG: 0,
+    cholesterolMg: 0,
+    sodiumMg: 0,
+    totalCarbsG: 0,
+    fiberG: 0,
+    sugarG: 0,
+    addedSugarG: 0,
+    proteinG: 0,
+    calciumMg: 0,
+    ironMg: 0,
+    potassiumMg: 0,
+    vitaminDMcg: 0,
+  };
+  const totals = day.meals.reduce((acc, m) => {
+    const t = m.totals;
+    return {
+      ...acc,
+      calories: acc.calories + t.calories,
+      totalFatG: acc.totalFatG + t.totalFatG,
+      saturatedFatG: acc.saturatedFatG + t.saturatedFatG,
+      transFatG: acc.transFatG + t.transFatG,
+      cholesterolMg: acc.cholesterolMg + t.cholesterolMg,
+      sodiumMg: acc.sodiumMg + t.sodiumMg,
+      totalCarbsG: acc.totalCarbsG + t.totalCarbsG,
+      fiberG: acc.fiberG + t.fiberG,
+      sugarG: acc.sugarG + t.sugarG,
+      addedSugarG: acc.addedSugarG + t.addedSugarG,
+      proteinG: acc.proteinG + t.proteinG,
+      calciumMg: acc.calciumMg + t.calciumMg,
+      ironMg: acc.ironMg + t.ironMg,
+      potassiumMg: acc.potassiumMg + t.potassiumMg,
+      vitaminDMcg: acc.vitaminDMcg + t.vitaminDMcg,
+    };
+  }, { ...ZERO });
+  return {
+    ...day,
+    totals,
+    targetDelta: {
+      calories: totals.calories - targets.calories,
+      proteinG: totals.proteinG - targets.proteinG,
+      carbsG: totals.totalCarbsG - targets.carbsG,
+      fatG: totals.totalFatG - targets.fatG,
+    },
+  };
+}
+
+export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
   const [activeDay, setActiveDay] = useState(0);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
   const day = plan.days[activeDay];
   const t = plan.targets;
+
+  const handleRegenerate = async (
+    dayIndex: number,
+    period: "breakfast" | "lunch" | "dinner"
+  ) => {
+    const key = `${dayIndex}-${period}`;
+    setRegenerating(key);
+    try {
+      const meal = plan.days[dayIndex].meals.find((m) => m.period === period);
+      const exclude = meal?.items.map((i) => i.recipeId) ?? [];
+      const res = await fetch("/api/regenerate-meal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile, period, excludeRecipeIds: exclude }),
+      });
+      if (!res.ok) throw new Error(`Regenerate failed: ${res.status}`);
+      const data = (await res.json()) as { meal: MealSelection };
+      const newDays = plan.days.map((d, i) => {
+        if (i !== dayIndex) return d;
+        const newMeals = d.meals.map((m) =>
+          m.period === period ? data.meal : m
+        );
+        return recomputeDayTotals({ ...d, meals: newMeals }, t);
+      });
+      onPlanUpdate({ ...plan, days: newDays });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRegenerating(null);
+    }
+  };
 
   return (
     <div className="w-full animate-fade-up space-y-12">
       {/* Cover band */}
-      <PlanCover totals={t} onRestart={onRestart} />
+      <PlanCover totals={t} onRestart={onRestart} plan={plan} />
 
-      <div className="max-w-6xl mx-auto px-1 sm:px-0 space-y-12">
-        {/* Day index — like a TV guide */}
+      <div className="max-w-6xl mx-auto px-5 sm:px-8 lg:px-0 space-y-12">
+        {/* Day index */}
         <section className="space-y-4 scroll-mt-20">
           <div className="flex items-baseline justify-between">
             <h2 className="eyebrow text-foreground/60">The week</h2>
@@ -62,14 +166,14 @@ export function PlanView({ plan, onRestart }: Props) {
                 key={`${d.day}-${i}`}
                 onClick={() => setActiveDay(i)}
                 className={cn(
-                  "flex flex-col items-start gap-1 px-3 py-3 text-left transition-colors border-r border-foreground last:border-r-0 cursor-pointer relative",
+                  "flex flex-col items-start gap-0.5 sm:gap-1 px-2 sm:px-3 py-2 sm:py-3 text-left transition-colors border-r border-foreground last:border-r-0 cursor-pointer relative",
                   activeDay === i
                     ? "bg-foreground text-paper"
                     : "bg-paper text-foreground hover:bg-foreground/5"
                 )}
               >
                 {activeDay === i && (
-                  <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-carolina" />
+                  <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 size-1.5 rounded-full bg-carolina" />
                 )}
                 <span
                   className={cn(
@@ -79,7 +183,7 @@ export function PlanView({ plan, onRestart }: Props) {
                 >
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <span className="font-display text-base sm:text-lg leading-none tracking-tight">
+                <span className="font-display text-sm sm:text-lg leading-none tracking-tight">
                   {d.day.slice(0, 3)}
                 </span>
                 <span
@@ -95,7 +199,13 @@ export function PlanView({ plan, onRestart }: Props) {
           </div>
         </section>
 
-        <DayBreakdown day={day} targets={t} />
+        <DayBreakdown
+          day={day}
+          targets={t}
+          onRegenerate={(period) => handleRegenerate(activeDay, period)}
+          regeneratingKey={regenerating}
+          dayIndex={activeDay}
+        />
 
         <footer className="pt-8 border-t border-foreground/20 text-xs text-muted-foreground italic">
           Calorie targets are estimates. Portion guidance is based on the
@@ -110,9 +220,11 @@ export function PlanView({ plan, onRestart }: Props) {
 function PlanCover({
   totals: t,
   onRestart,
+  plan,
 }: {
   totals: PlanResult["targets"];
   onRestart: () => void;
+  plan: PlanResult;
 }) {
   return (
     <section className="relative border-b border-foreground bg-carolina-deep text-paper overflow-hidden">
@@ -148,15 +260,25 @@ function PlanCover({
         </div>
 
         <div className="lg:col-span-4 space-y-3">
-          <Button
-            variant="secondary"
-            onClick={onRestart}
-            size="sm"
-            className="bg-paper text-foreground hover:bg-paper/90 border-paper"
-          >
-            <RotateCcw className="size-3.5" strokeWidth={1.5} />
-            Edit my profile
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => downloadICS(plan)}
+              size="sm"
+              className="bg-carolina text-white hover:bg-carolina/90 border border-carolina"
+            >
+              <CalendarIcon className="size-3.5" strokeWidth={1.5} />
+              Add to calendar
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onRestart}
+              size="sm"
+              className="bg-paper text-foreground hover:bg-paper/90 border-paper"
+            >
+              <RotateCcw className="size-3.5" strokeWidth={1.5} />
+              Edit profile
+            </Button>
+          </div>
           <div className="text-[11px] font-mono-tabular text-paper/65 space-x-4">
             <span>
               <span className="eyebrow text-paper/45 mr-1">BMR</span>
@@ -236,9 +358,15 @@ function CoverCell({
 function DayBreakdown({
   day,
   targets,
+  onRegenerate,
+  regeneratingKey,
+  dayIndex,
 }: {
   day: PlanResult["days"][0];
   targets: PlanResult["targets"];
+  onRegenerate: (period: "breakfast" | "lunch" | "dinner") => void;
+  regeneratingKey: string | null;
+  dayIndex: number;
 }) {
   return (
     <div className="space-y-10">
@@ -288,7 +416,16 @@ function DayBreakdown({
 
       <section className="space-y-8">
         {day.meals.map((meal, idx) => (
-          <MealArticle key={idx} meal={meal} />
+          <MealArticle
+            key={idx}
+            meal={meal}
+            onRegenerate={() => {
+              if (meal.period !== "late_lunch") onRegenerate(meal.period);
+            }}
+            regenerating={
+              regeneratingKey === `${dayIndex}-${meal.period}`
+            }
+          />
         ))}
       </section>
     </div>
@@ -347,7 +484,15 @@ function MacroLine({
   );
 }
 
-function MealArticle({ meal }: { meal: MealSelection }) {
+function MealArticle({
+  meal,
+  onRegenerate,
+  regenerating,
+}: {
+  meal: MealSelection;
+  onRegenerate: () => void;
+  regenerating: boolean;
+}) {
   if (meal.period === "late_lunch") return null;
   const meta = MEAL_META[meal.period];
   const Icon = meta.icon;
@@ -394,6 +539,24 @@ function MealArticle({ meal }: { meal: MealSelection }) {
             </span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          disabled={regenerating}
+          className="mt-4 inline-flex items-center gap-1.5 text-[11px] eyebrow text-foreground/70 hover:text-foreground border border-foreground/30 hover:border-foreground px-2.5 py-1.5 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {regenerating ? (
+            <>
+              <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
+              Swapping
+            </>
+          ) : (
+            <>
+              <Shuffle className="size-3" strokeWidth={1.5} />
+              Show alternatives
+            </>
+          )}
+        </button>
       </header>
 
       <div className="sm:col-span-9">

@@ -22,6 +22,7 @@ const TAB_TO_PERIOD: Record<string, MealPeriod> = {
 export const ALL_YOU_CARE_LOCATIONS: { slug: string; name: string }[] = [
   { slug: "top-of-lenoir", name: "Top of Lenoir" },
   { slug: "chase", name: "Chase" },
+  { slug: "cafe-1789", name: "Cafe 1789" },
 ];
 
 const ALLERGEN_PATTERNS: { className: string; allergen: Allergen }[] = [
