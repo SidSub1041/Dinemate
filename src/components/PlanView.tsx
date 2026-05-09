@@ -11,14 +11,24 @@ import {
   Shuffle,
   Calendar as CalendarIcon,
   Loader2,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatNumber } from "@/lib/utils";
 import { PLAN_COVER } from "@/lib/images";
 import { downloadICS } from "@/lib/calendar";
+import {
+  usePreferences,
+  ratingFor,
+  countByRating,
+  type Preference,
+  type PreferenceMap,
+} from "@/lib/preferences";
 import type {
   MealPeriod,
   MealSelection,
+  MenuItem,
   PlanResult,
   UserProfile,
 } from "@/lib/types";
@@ -112,6 +122,7 @@ function recomputeDayTotals(
 export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
   const [activeDay, setActiveDay] = useState(0);
   const [regenerating, setRegenerating] = useState<string | null>(null);
+  const { prefs, setRating, clear: clearPrefs, hydrated } = usePreferences();
   const day = plan.days[activeDay];
   const t = plan.targets;
 
@@ -127,7 +138,12 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
       const res = await fetch("/api/regenerate-meal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, period, excludeRecipeIds: exclude }),
+        body: JSON.stringify({
+          profile,
+          period,
+          excludeRecipeIds: exclude,
+          ratings: prefs.items,
+        }),
       });
       if (!res.ok) throw new Error(`Regenerate failed: ${res.status}`);
       const data = (await res.json()) as { meal: MealSelection };
@@ -146,12 +162,88 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
     }
   };
 
+  const handleRebuildAll = async () => {
+    setRegenerating("all");
+    try {
+      const res = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile, ratings: prefs.items }),
+      });
+      if (!res.ok) throw new Error(`Rebuild failed: ${res.status}`);
+      const newPlan = (await res.json()) as PlanResult;
+      onPlanUpdate(newPlan);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRegenerating(null);
+    }
+  };
+
+  const handleRate = (recipeId: string, rating: Preference | null) => {
+    setRating(recipeId, rating);
+  };
+
+  const counts = countByRating(prefs);
+
   return (
     <div className="w-full animate-fade-up space-y-12">
       {/* Cover band */}
       <PlanCover totals={t} onRestart={onRestart} plan={plan} />
 
       <div className="max-w-6xl mx-auto px-5 sm:px-8 lg:px-0 space-y-12">
+        {/* Preferences bar */}
+        {hydrated && (counts.loved > 0 || counts.hated > 0) && (
+          <section className="border border-foreground/15 bg-carolina-tint/40 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-foreground/85 leading-relaxed">
+              <span className="eyebrow text-carolina-deep mr-2">Learning</span>
+              You&apos;ve rated{" "}
+              <span className="font-medium tabular-nums">
+                {counts.loved}
+              </span>{" "}
+              <span className="text-foreground/65">favorite</span>
+              {counts.loved !== 1 ? "s" : ""}
+              {counts.hated > 0 && (
+                <>
+                  {" "}and{" "}
+                  <span className="font-medium tabular-nums">
+                    {counts.hated}
+                  </span>{" "}
+                  <span className="text-foreground/65">to skip</span>
+                </>
+              )}
+              . Rebuilding the week applies them.
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleRebuildAll}
+                disabled={regenerating !== null}
+                className="bg-carolina hover:bg-carolina/90 text-white"
+              >
+                {regenerating === "all" ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin" />
+                    Rebuilding
+                  </>
+                ) : (
+                  <>
+                    <Shuffle className="size-3" strokeWidth={1.5} />
+                    Rebuild week
+                  </>
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={clearPrefs}
+                className="eyebrow text-foreground/55 hover:text-foreground underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground cursor-pointer"
+              >
+                Clear ratings
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Day index */}
         <section className="space-y-4 scroll-mt-20">
           <div className="flex items-baseline justify-between">
@@ -205,6 +297,8 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
           onRegenerate={(period) => handleRegenerate(activeDay, period)}
           regeneratingKey={regenerating}
           dayIndex={activeDay}
+          prefs={prefs}
+          onRate={handleRate}
         />
 
         <footer className="pt-8 border-t border-foreground/20 text-xs text-muted-foreground italic">
@@ -361,12 +455,16 @@ function DayBreakdown({
   onRegenerate,
   regeneratingKey,
   dayIndex,
+  prefs,
+  onRate,
 }: {
   day: PlanResult["days"][0];
   targets: PlanResult["targets"];
   onRegenerate: (period: "breakfast" | "lunch" | "dinner") => void;
   regeneratingKey: string | null;
   dayIndex: number;
+  prefs: PreferenceMap;
+  onRate: (recipeId: string, rating: Preference | null) => void;
 }) {
   return (
     <div className="space-y-10">
@@ -425,6 +523,8 @@ function DayBreakdown({
             regenerating={
               regeneratingKey === `${dayIndex}-${meal.period}`
             }
+            prefs={prefs}
+            onRate={onRate}
           />
         ))}
       </section>
@@ -488,10 +588,14 @@ function MealArticle({
   meal,
   onRegenerate,
   regenerating,
+  prefs,
+  onRate,
 }: {
   meal: MealSelection;
   onRegenerate: () => void;
   regenerating: boolean;
+  prefs: PreferenceMap;
+  onRate: (recipeId: string, rating: Preference | null) => void;
 }) {
   if (meal.period === "late_lunch") return null;
   const meta = MEAL_META[meal.period];
@@ -584,24 +688,33 @@ function MealArticle({
                 className="border-b border-foreground/10 last:border-0 align-top"
               >
                 <td className="py-3 pr-2">
-                  <div className="font-medium text-sm leading-snug tracking-tight">
-                    {it.name}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 italic">
-                    {it.station}
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {it.diets.includes("vegan") && (
-                      <DietTag>Vegan</DietTag>
-                    )}
-                    {it.diets.includes("vegetarian") &&
-                      !it.diets.includes("vegan") && (
-                        <DietTag>Vegetarian</DietTag>
-                      )}
-                    {it.diets.includes("made_without_gluten") && (
-                      <DietTag>GF</DietTag>
-                    )}
-                    {it.diets.includes("halal") && <DietTag>Halal</DietTag>}
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm leading-snug tracking-tight">
+                        {it.name}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5 italic">
+                        {it.station}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {it.diets.includes("vegan") && (
+                          <DietTag>Vegan</DietTag>
+                        )}
+                        {it.diets.includes("vegetarian") &&
+                          !it.diets.includes("vegan") && (
+                            <DietTag>Vegetarian</DietTag>
+                          )}
+                        {it.diets.includes("made_without_gluten") && (
+                          <DietTag>GF</DietTag>
+                        )}
+                        {it.diets.includes("halal") && <DietTag>Halal</DietTag>}
+                      </div>
+                    </div>
+                    <RatingButtons
+                      item={it}
+                      rating={ratingFor(prefs, it.recipeId)}
+                      onRate={onRate}
+                    />
                   </div>
                 </td>
                 <td className="py-3 text-right text-xs font-mono-tabular text-muted-foreground hidden sm:table-cell whitespace-nowrap">
@@ -639,5 +752,48 @@ function DietTag({ children }: { children: React.ReactNode }) {
     <span className="inline-flex items-center border border-foreground/30 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-foreground/70 font-medium">
       {children}
     </span>
+  );
+}
+
+function RatingButtons({
+  item,
+  rating,
+  onRate,
+}: {
+  item: MenuItem;
+  rating: Preference | null;
+  onRate: (recipeId: string, rating: Preference | null) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1 shrink-0" role="group" aria-label={`Rate ${item.name}`}>
+      <button
+        type="button"
+        onClick={() => onRate(item.recipeId, rating === "love" ? null : "love")}
+        aria-pressed={rating === "love"}
+        title={rating === "love" ? "Loved" : "Mark as favorite"}
+        className={cn(
+          "size-6 inline-flex items-center justify-center border transition-colors cursor-pointer",
+          rating === "love"
+            ? "bg-carolina border-carolina text-white"
+            : "border-foreground/20 text-foreground/40 hover:border-carolina hover:text-carolina"
+        )}
+      >
+        <ThumbsUp className="size-3" strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onRate(item.recipeId, rating === "hate" ? null : "hate")}
+        aria-pressed={rating === "hate"}
+        title={rating === "hate" ? "Skipped" : "Skip this"}
+        className={cn(
+          "size-6 inline-flex items-center justify-center border transition-colors cursor-pointer",
+          rating === "hate"
+            ? "bg-foreground border-foreground text-paper"
+            : "border-foreground/20 text-foreground/40 hover:border-foreground hover:text-foreground"
+        )}
+      >
+        <ThumbsDown className="size-3" strokeWidth={2} />
+      </button>
+    </div>
   );
 }

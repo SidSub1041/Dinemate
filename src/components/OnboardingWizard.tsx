@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/Input";
 import { StepDots } from "@/components/ui/Progress";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ChipToggle } from "@/components/ui/Checkbox";
+import { usePreferences } from "@/lib/preferences";
 import {
   ACTIVITY_LABELS,
   GOAL_LABELS,
@@ -132,6 +133,7 @@ export function OnboardingWizard({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setFormLocal] = useState<FormState>(initialForm);
+  const { prefs } = usePreferences();
 
   // Always update local + parent in event handlers (never inside an updater),
   // so React doesn't see a parent setState during a child render.
@@ -185,7 +187,7 @@ export function OnboardingWizard({
       const res = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify({ profile, ratings: prefs.items }),
       });
       if (!res.ok) {
         const t = await res.text();

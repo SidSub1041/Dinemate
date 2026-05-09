@@ -37,6 +37,16 @@ const profileSchema = z.object({
   fatPercent: z.number().min(0.15).max(0.5),
 });
 
+const requestSchema = z.union([
+  // Old shape: just the profile (backwards compatibility).
+  profileSchema,
+  // New shape: profile + ratings.
+  z.object({
+    profile: profileSchema,
+    ratings: z.record(z.string(), z.enum(["love", "hate"])).default({}),
+  }),
+]);
+
 export async function POST(req: Request) {
   let payload: unknown;
   try {
@@ -44,15 +54,18 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const parsed = profileSchema.safeParse(payload);
+  const parsed = requestSchema.safeParse(payload);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid profile", details: parsed.error.format() },
+      { error: "Invalid request", details: parsed.error.format() },
       { status: 400 }
     );
   }
-  const profile = parsed.data as UserProfile;
+  const profile = ("profile" in parsed.data
+    ? parsed.data.profile
+    : parsed.data) as UserProfile;
+  const ratings = "ratings" in parsed.data ? parsed.data.ratings : {};
   const targets = calculateTargets(profile);
-  const plan = buildPlan(menuData as MenuData, profile, targets, 7);
+  const plan = buildPlan(menuData as MenuData, profile, targets, 7, ratings);
   return NextResponse.json(plan);
 }

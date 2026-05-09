@@ -10,6 +10,43 @@ import type {
   UserProfile,
 } from "./types";
 
+/** Plain rating map exchanged with the API. */
+export type RatingMap = Record<string, "love" | "hate">;
+
+interface ScoringContext {
+  ratings: RatingMap;
+  /** Station -> affinity in [-1, 1]. Computed from ratings. */
+  stationAffinity: Map<string, number>;
+}
+
+/** Build a scoring context from raw ratings + the menu. */
+function buildScoringContext(
+  ratings: RatingMap,
+  data: MenuData
+): ScoringContext {
+  const stationCounts = new Map<string, { love: number; hate: number }>();
+  // Walk the menu so we know which station each rated recipe belongs to.
+  for (const loc of data.locations) {
+    for (const period of Object.keys(loc.meals) as MealPeriod[]) {
+      for (const item of loc.meals[period]) {
+        const rating = ratings[item.recipeId];
+        if (!rating) continue;
+        const cur = stationCounts.get(item.station) ?? { love: 0, hate: 0 };
+        if (rating === "love") cur.love++;
+        else cur.hate++;
+        stationCounts.set(item.station, cur);
+      }
+    }
+  }
+  const stationAffinity = new Map<string, number>();
+  for (const [station, { love, hate }] of stationCounts) {
+    const total = love + hate;
+    if (total === 0) continue;
+    stationAffinity.set(station, (love - hate) / total);
+  }
+  return { ratings, stationAffinity };
+}
+
 const ZERO_NUTRITION: NutritionFacts = {
   servingSize: "",
   calories: 0,
@@ -155,7 +192,9 @@ interface MealTarget {
 function scoreSelection(
   totals: NutritionFacts,
   target: MealTarget,
-  itemCount: number
+  itemCount: number,
+  itemList: ItemWithLocation[],
+  ctx: ScoringContext
 ): number {
   const calDelta = Math.abs(totals.calories - target.calories);
   const protDelta = Math.abs(totals.proteinG - target.proteinG);
@@ -172,7 +211,18 @@ function scoreSelection(
   const fatPenalty = fatDelta * 0.5;
   const variety = itemCount >= 2 && itemCount <= 4 ? 0 : 30;
 
-  return -(proteinShortfallPenalty + calPenalty + carbPenalty + fatPenalty + variety);
+  // Preference bonuses: loved item = +120, station affinity = up to +60.
+  let preferenceBonus = 0;
+  for (const it of itemList) {
+    if (ctx.ratings[it.recipeId] === "love") preferenceBonus += 120;
+    const aff = ctx.stationAffinity.get(it.station);
+    if (aff !== undefined) preferenceBonus += 60 * aff;
+  }
+
+  return (
+    -(proteinShortfallPenalty + calPenalty + carbPenalty + fatPenalty + variety) +
+    preferenceBonus
+  );
 }
 
 interface BuiltMeal {
@@ -186,19 +236,27 @@ function buildMealForLocation(
   candidates: ItemWithLocation[],
   target: MealTarget,
   used: Set<string>,
-  startIndex: number
+  startIndex: number,
+  ctx: ScoringContext
 ): BuiltMeal | null {
   const pool = candidates.filter((c) => !used.has(c.recipeId));
   if (!pool.length) return null;
 
-  // Pick a high-protein anchor with good protein/cal ratio (avoid pure-fat blocks).
+  // Anchor pool: high-protein items, prioritizing loved items + station affinity.
   const anchorPool = pool
     .filter((c) => c.nutrition!.proteinG >= 8 || c.nutrition!.calories >= 150)
-    .sort(
-      (a, b) =>
-        b.nutrition!.proteinG / Math.max(b.nutrition!.calories, 1) -
-        a.nutrition!.proteinG / Math.max(a.nutrition!.calories, 1)
-    );
+    .sort((a, b) => {
+      const baseA = a.nutrition!.proteinG / Math.max(a.nutrition!.calories, 1);
+      const baseB = b.nutrition!.proteinG / Math.max(b.nutrition!.calories, 1);
+      const lovedA = ctx.ratings[a.recipeId] === "love" ? 1 : 0;
+      const lovedB = ctx.ratings[b.recipeId] === "love" ? 1 : 0;
+      const affA = ctx.stationAffinity.get(a.station) ?? 0;
+      const affB = ctx.stationAffinity.get(b.station) ?? 0;
+      // Loved > station affinity > protein/cal ratio.
+      if (lovedA !== lovedB) return lovedB - lovedA;
+      if (Math.abs(affA - affB) > 0.05) return affB - affA;
+      return baseB - baseA;
+    });
 
   if (anchorPool.length === 0) return null;
   const anchor = anchorPool[startIndex % anchorPool.length];
@@ -207,14 +265,20 @@ function buildMealForLocation(
 
   // Greedily add 1-3 more items that improve the score, no repeats.
   for (let i = 0; i < 3; i++) {
-    const currentScore = scoreSelection(totals, target, items.length);
+    const currentScore = scoreSelection(totals, target, items.length, items, ctx);
     let best: { item: ItemWithLocation; score: number; totals: NutritionFacts } | null = null;
     for (const c of pool) {
       if (items.some((it) => it.recipeId === c.recipeId)) continue;
       const newTotals = addNutrition(totals, c.nutrition!);
       // Hard cap: don't blow past 130% of target calories.
       if (newTotals.calories > target.calories * 1.3) continue;
-      const newScore = scoreSelection(newTotals, target, items.length + 1);
+      const newScore = scoreSelection(
+        newTotals,
+        target,
+        items.length + 1,
+        [...items, c],
+        ctx
+      );
       if (newScore > currentScore && (!best || newScore > best.score)) {
         best = { item: c, score: newScore, totals: newTotals };
       }
@@ -228,7 +292,7 @@ function buildMealForLocation(
     items,
     totals,
     location: anchor.locationName,
-    score: scoreSelection(totals, target, items.length),
+    score: scoreSelection(totals, target, items.length, items, ctx),
   };
 }
 
@@ -238,11 +302,14 @@ function buildMeal(
   target: MealTarget,
   profile: UserProfile,
   used: Set<string>,
-  variantSeed: number
+  variantSeed: number,
+  ctx: ScoringContext
 ): MealSelection {
   const all = flattenMenu(data, period)
     .filter(isPlausibleEntree)
-    .filter((it) => passesDiet(it, profile));
+    .filter((it) => passesDiet(it, profile))
+    // Hate filter: never serve up an explicitly hated item.
+    .filter((it) => ctx.ratings[it.recipeId] !== "hate");
 
   if (all.length === 0) {
     return {
@@ -256,7 +323,7 @@ function buildMeal(
   // Try multiple anchor variants to diversify days and pick the best.
   const candidates: BuiltMeal[] = [];
   for (let v = 0; v < 6; v++) {
-    const built = buildMealForLocation(all, target, used, variantSeed + v);
+    const built = buildMealForLocation(all, target, used, variantSeed + v, ctx);
     if (built) candidates.push(built);
   }
   if (candidates.length === 0) {
@@ -290,11 +357,13 @@ export function buildSingleMeal(
   targets: MacroTargets,
   period: "breakfast" | "lunch" | "dinner",
   excludeRecipeIds: string[],
+  ratings: RatingMap = {},
   variantSeed: number = Math.floor(Math.random() * 1000)
 ): MealSelection {
   const target = targetForMeal(period, targets);
   const used = new Set<string>(excludeRecipeIds);
-  return buildMeal(data, period, target, profile, used, variantSeed);
+  const ctx = buildScoringContext(ratings, data);
+  return buildMeal(data, period, target, profile, used, variantSeed, ctx);
 }
 
 const MEAL_SPLIT: Record<"breakfast" | "lunch" | "dinner", number> = {
@@ -330,15 +399,17 @@ export function buildPlan(
   data: MenuData,
   profile: UserProfile,
   targets: MacroTargets,
-  days = 7
+  days = 7,
+  ratings: RatingMap = {}
 ): PlanResult {
+  const ctx = buildScoringContext(ratings, data);
   const result: DailyPlan[] = [];
   for (let day = 0; day < days; day++) {
     const used = new Set<string>();
     const meals: MealSelection[] = [];
     for (const period of ["breakfast", "lunch", "dinner"] as const) {
       const target = targetForMeal(period, targets);
-      const sel = buildMeal(data, period, target, profile, used, day * 7);
+      const sel = buildMeal(data, period, target, profile, used, day * 7, ctx);
       meals.push(sel);
     }
     let dayTotals = { ...ZERO_NUTRITION };

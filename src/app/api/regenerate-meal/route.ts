@@ -39,6 +39,7 @@ const schema = z.object({
   }),
   period: z.enum(["breakfast", "lunch", "dinner"]),
   excludeRecipeIds: z.array(z.string()).max(200).default([]),
+  ratings: z.record(z.string(), z.enum(["love", "hate"])).default({}),
 });
 
 export async function POST(req: Request) {
@@ -55,14 +56,15 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const { profile, period, excludeRecipeIds } = parsed.data;
+  const { profile, period, excludeRecipeIds, ratings } = parsed.data;
   const targets = calculateTargets(profile as UserProfile);
   const meal = buildSingleMeal(
     menuData as MenuData,
     profile as UserProfile,
     targets,
     period,
-    excludeRecipeIds
+    excludeRecipeIds,
+    ratings
   );
   return NextResponse.json({ meal });
 }
