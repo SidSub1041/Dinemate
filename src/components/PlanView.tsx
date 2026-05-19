@@ -29,6 +29,13 @@ import {
   type Preference,
   type PreferenceMap,
 } from "@/lib/preferences";
+import {
+  useMealHistory,
+  useCustomMeals,
+  customMealToMenuItem,
+  type CustomMeal,
+} from "@/lib/use-app-data";
+import { Undo2, BookMarked } from "lucide-react";
 import type {
   ExternalMeal,
   MealPeriod,
@@ -207,6 +214,8 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
   const [external, setExternal] = useState<ExternalMap>(() =>
     deriveExternalFromPlan(plan)
   );
+  const history = useMealHistory();
+  const { meals: customMealsLibrary } = useCustomMeals();
 
   const day = plan.days[activeDay];
   const t = plan.targets;
@@ -215,10 +224,15 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
     dayIndex: number,
     period: CampusPeriod
   ) => {
+    const slot = `${dayIndex}-${period}` as SlotKey;
     const key = `${dayIndex}-${period}`;
     setRegenerating(key);
     try {
       const meal = plan.days[dayIndex].meals.find((m) => m.period === period);
+      // Snapshot the current meal for one-tap revert.
+      if (meal && meal.items.length > 0 && !meal.external) {
+        history.push(slot, meal);
+      }
       const exclude = meal?.items.map((i) => i.recipeId) ?? [];
       // Subtract any same-day external macros so the swap respects them too.
       const sameDayExternal = (
@@ -289,6 +303,54 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
 
   const handleRate = (recipeId: string, rating: Preference | null) => {
     setRating(recipeId, rating);
+  };
+
+  const handleRevert = (dayIndex: number, period: CampusPeriod) => {
+    const slot = `${dayIndex}-${period}` as SlotKey;
+    const previous = history.pop(slot);
+    if (!previous) return;
+    const newDays = plan.days.map((d, i) => {
+      if (i !== dayIndex) return d;
+      const newMeals = d.meals.map((m) =>
+        m.period === period ? previous : m
+      );
+      return recomputeDayTotals({ ...d, meals: newMeals }, t);
+    });
+    onPlanUpdate({ ...plan, days: newDays });
+  };
+
+  const handleSwapToCustom = (
+    dayIndex: number,
+    period: CampusPeriod,
+    custom: CustomMeal
+  ) => {
+    const slot = `${dayIndex}-${period}` as SlotKey;
+    const meal = plan.days[dayIndex].meals.find((m) => m.period === period);
+    if (meal && meal.items.length > 0 && !meal.external) {
+      history.push(slot, meal);
+    }
+    const item = customMealToMenuItem(custom);
+    const newMeal: MealSelection = {
+      period,
+      location: custom.source === "homemade" ? "Homemade" : custom.station || "Custom",
+      items: [item],
+      totals: {
+        ...emptyTotals(),
+        calories: custom.calories,
+        proteinG: custom.proteinG,
+        totalCarbsG: custom.carbsG,
+        totalFatG: custom.fatG,
+        fiberG: custom.fiberG ?? 0,
+      },
+    };
+    const newDays = plan.days.map((d, i) => {
+      if (i !== dayIndex) return d;
+      const newMeals = d.meals.map((m) =>
+        m.period === period ? newMeal : m
+      );
+      return recomputeDayTotals({ ...d, meals: newMeals }, t);
+    });
+    onPlanUpdate({ ...plan, days: newDays });
   };
 
   const handleTogglePin = (dayIndex: number, period: CampusPeriod) => {
@@ -480,6 +542,15 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
             handleSetExternal(activeDay, period, value)
           }
           customizationCount={customizationCount}
+          canRevert={(period) =>
+            history.hydrated &&
+            history.has(`${activeDay}-${period}` as SlotKey)
+          }
+          onRevert={(period) => handleRevert(activeDay, period)}
+          customMeals={customMealsLibrary}
+          onSwapToCustom={(period, meal) =>
+            handleSwapToCustom(activeDay, period, meal)
+          }
         />
 
         <footer className="pt-8 border-t border-foreground/20 text-xs text-muted-foreground italic">
@@ -641,6 +712,10 @@ function DayBreakdown({
   onTogglePin,
   onSetExternal,
   customizationCount,
+  canRevert,
+  onRevert,
+  customMeals,
+  onSwapToCustom,
 }: {
   day: PlanResult["days"][0];
   targets: PlanResult["targets"];
@@ -652,6 +727,10 @@ function DayBreakdown({
   onTogglePin: (period: CampusPeriod) => void;
   onSetExternal: (period: CampusPeriod, value: ExternalMeal | null) => void;
   customizationCount: number;
+  canRevert: (period: CampusPeriod) => boolean;
+  onRevert: (period: CampusPeriod) => void;
+  customMeals: CustomMeal[];
+  onSwapToCustom: (period: CampusPeriod, meal: CustomMeal) => void;
 }) {
   return (
     <div className="space-y-10">
@@ -729,6 +808,17 @@ function DayBreakdown({
               if (meal.period !== "late_lunch")
                 onSetExternal(meal.period, value);
             }}
+            canRevert={
+              meal.period !== "late_lunch" && canRevert(meal.period)
+            }
+            onRevert={() => {
+              if (meal.period !== "late_lunch") onRevert(meal.period);
+            }}
+            customMeals={customMeals}
+            onSwapToCustom={(custom) => {
+              if (meal.period !== "late_lunch")
+                onSwapToCustom(meal.period, custom);
+            }}
           />
         ))}
       </section>
@@ -796,6 +886,10 @@ function MealArticle({
   onRate,
   onTogglePin,
   onSetExternal,
+  canRevert,
+  onRevert,
+  customMeals,
+  onSwapToCustom,
 }: {
   meal: MealSelection;
   onRegenerate: () => void;
@@ -804,7 +898,12 @@ function MealArticle({
   onRate: (recipeId: string, rating: Preference | null) => void;
   onTogglePin: () => void;
   onSetExternal: (value: ExternalMeal | null) => void;
+  canRevert: boolean;
+  onRevert: () => void;
+  customMeals: CustomMeal[];
+  onSwapToCustom: (custom: CustomMeal) => void;
 }) {
+  const [libraryOpen, setLibraryOpen] = useState(false);
   if (meal.period === "late_lunch") return null;
   const meta = MEAL_META[meal.period];
   const Icon = meta.icon;
@@ -956,7 +1055,44 @@ function MealArticle({
               )}
             </button>
           )}
+          {canRevert && !isExternal && (
+            <button
+              type="button"
+              onClick={onRevert}
+              className="inline-flex items-center gap-1.5 text-[11px] eyebrow border px-2.5 py-1.5 cursor-pointer transition-colors text-carolina-deep border-carolina/40 hover:border-carolina hover:bg-carolina/5"
+              title="Restore the previous selection"
+            >
+              <Undo2 className="size-3" strokeWidth={1.5} />
+              Undo swap
+            </button>
+          )}
+          {!isExternal && !isPinned && customMeals.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setLibraryOpen((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] eyebrow border px-2.5 py-1.5 cursor-pointer transition-colors",
+                libraryOpen
+                  ? "bg-carolina text-white border-carolina"
+                  : "text-foreground/70 hover:text-foreground border-foreground/30 hover:border-foreground"
+              )}
+              title="Replace with one of your saved custom meals"
+            >
+              <BookMarked className="size-3" strokeWidth={1.5} />
+              Library
+            </button>
+          )}
         </div>
+        {libraryOpen && !isExternal && !isPinned && customMeals.length > 0 && (
+          <CustomMealPicker
+            meals={customMeals}
+            onPick={(m) => {
+              onSwapToCustom(m);
+              setLibraryOpen(false);
+            }}
+            onClose={() => setLibraryOpen(false)}
+          />
+        )}
       </header>
 
       <div className="sm:col-span-9">
@@ -1221,3 +1357,52 @@ function RatingButtons({
     </div>
   );
 }
+
+function CustomMealPicker({
+  meals,
+  onPick,
+  onClose,
+}: {
+  meals: CustomMeal[];
+  onPick: (meal: CustomMeal) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mt-3 border border-carolina/40 bg-carolina-tint/30 p-3 space-y-2 max-h-72 overflow-y-auto">
+      <div className="flex items-baseline justify-between">
+        <span className="eyebrow text-carolina-deep">From your library</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-[10px] eyebrow text-foreground/55 hover:text-foreground cursor-pointer"
+        >
+          Close
+        </button>
+      </div>
+      <ul className="space-y-1">
+        {meals.map((m) => (
+          <li key={m.id}>
+            <button
+              type="button"
+              onClick={() => onPick(m)}
+              className="w-full flex items-baseline justify-between gap-3 px-2 py-2 text-left hover:bg-carolina/10 cursor-pointer border border-transparent hover:border-carolina/30 transition-colors"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-medium leading-tight truncate">
+                  {m.name}
+                </div>
+                <div className="text-[10px] text-muted-foreground italic">
+                  {m.source === 'homemade' ? 'Homemade' : m.station || 'Custom'}
+                </div>
+              </div>
+              <div className="text-[11px] font-mono-tabular text-foreground/75 tabular-nums shrink-0">
+                {m.calories} kcal · {m.proteinG}g P
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+

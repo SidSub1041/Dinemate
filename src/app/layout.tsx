@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
+import { SiteNav } from "@/components/SiteNav";
+import { Colophon } from "@/components/Colophon";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -82,7 +84,11 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SiteNav />
+        <main className="flex-1 flex flex-col">{children}</main>
+        <Colophon />
+      </body>
     </html>
   );
 }
