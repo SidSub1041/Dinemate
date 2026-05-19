@@ -1,0 +1,175 @@
+// Dinemate Prisma schema.
+//
+// Layered into two zones:
+//   1. NextAuth canonical tables (User, Account, Session, VerificationToken)
+//      — these match the shapes the @auth/prisma-adapter expects.
+//   2. Application-domain tables (Profile, Plan, CustomMeal, EatenEntry,
+//      Rating) — one-to-one or one-to-many off User.
+//
+// Postgres-specific features in use:
+//   * Json columns for the bulky plan/habit/preference blobs.
+//   * cascade deletes so removing a User cleans up every related row.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================
+// NextAuth canonical models
+// =============================================================
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  emailVerified   DateTime?
+  name            String?
+  image           String?
+  hashedPassword  String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  profile         Profile?
+  plan            Plan?
+  customMeals     CustomMeal[]
+  eatenEntries    EatenEntry[]
+  ratings         Rating[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// =============================================================
+// Dinemate domain
+// =============================================================
+
+/// Mifflin-St Jeor inputs + goal + diet + habits. 1:1 with User.
+model Profile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  age               Int
+  sex               String   // "male" | "female"
+  heightCm          Float
+  weightKg          Float
+  activity          String   // sedentary | light | moderate | very | extreme
+  goal              String   // cut | maintain | lean-bulk | bulk
+  diet              String   // none | vegetarian | vegan | halal | made_without_gluten
+  avoidAllergens    String[]
+  proteinPerKg      Float
+  fatPercent        Float
+  habits            Json     // { mealsOnCampus: string[], weeklyCampusMeals: string }
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// The most recently generated plan. 1:1 with User.
+/// Whole PlanResult stored as JSON because it's a denormalized output, not
+/// something the DB will query into directly.
+model Plan {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  data      Json     // full PlanResult object
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// User's own homemade / restaurant meals library.
+model CustomMeal {
+  id          String   @id   // we mirror the client-side id so swap operations stay stable
+  userId      String
+  name        String
+  source      String        // homemade | restaurant | other
+  station     String        @default("")
+  calories    Int
+  proteinG    Int
+  carbsG      Int
+  fatG        Int
+  fiberG      Int?
+  diets       String[]
+  allergens   String[]
+  notes       String?       @db.Text
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+/// "What I actually ate" entries.
+model EatenEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  date        String        // YYYY-MM-DD
+  period      String        // breakfast | lunch | dinner
+  source      String        // planned | custom | estimate | skipped
+  label       String?
+  calories    Int?
+  proteinG    Int?
+  carbsG      Int?
+  fatG        Int?
+  notes       String?       @db.Text
+  loggedAt    DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, period])
+  @@index([userId, date])
+}
+
+/// 👍 / 👎 per recipe.
+model Rating {
+  id        String   @id @default(cuid())
+  userId    String
+  recipeId  String
+  value     String        // "love" | "hate"
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recipeId])
+  @@index([userId])
+}

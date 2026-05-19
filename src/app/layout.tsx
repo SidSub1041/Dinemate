@@ -3,6 +3,8 @@ import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { SiteNav } from "@/components/SiteNav";
 import { Colophon } from "@/components/Colophon";
+import { AuthProvider } from "@/components/AuthProvider";
+import { SyncManager } from "@/components/SyncManager";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -85,9 +87,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SiteNav />
-        <main className="flex-1 flex flex-col">{children}</main>
-        <Colophon />
+        <AuthProvider>
+          <SyncManager />
+          <SiteNav />
+          <main className="flex-1 flex flex-col">{children}</main>
+          <Colophon />
+        </AuthProvider>
       </body>
     </html>
   );
