@@ -13,6 +13,10 @@ import {
   Loader2,
   ThumbsUp,
   ThumbsDown,
+  Lock,
+  Unlock,
+  LogOut,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn, formatNumber } from "@/lib/utils";
@@ -26,12 +30,18 @@ import {
   type PreferenceMap,
 } from "@/lib/preferences";
 import type {
+  ExternalMeal,
   MealPeriod,
   MealSelection,
   MenuItem,
   PlanResult,
   UserProfile,
 } from "@/lib/types";
+
+type CampusPeriod = "breakfast" | "lunch" | "dinner";
+type SlotKey = `${number}-${CampusPeriod}`;
+type PinnedMap = Record<SlotKey, MealSelection>;
+type ExternalMap = Record<SlotKey, ExternalMeal>;
 
 const MEAL_META: Record<
   Exclude<MealPeriod, "late_lunch">,
@@ -62,6 +72,72 @@ interface Props {
   profile: UserProfile;
   onRestart: () => void;
   onPlanUpdate: (plan: PlanResult) => void;
+}
+
+function emptyTotals() {
+  return {
+    servingSize: "",
+    calories: 0,
+    totalFatG: 0,
+    saturatedFatG: 0,
+    transFatG: 0,
+    cholesterolMg: 0,
+    sodiumMg: 0,
+    totalCarbsG: 0,
+    fiberG: 0,
+    sugarG: 0,
+    addedSugarG: 0,
+    proteinG: 0,
+    calciumMg: 0,
+    ironMg: 0,
+    potassiumMg: 0,
+    vitaminDMcg: 0,
+  };
+}
+
+function externalToMealSelection(
+  period: CampusPeriod,
+  ext: ExternalMeal
+): MealSelection {
+  return {
+    period,
+    location: ext.label?.trim() ? ext.label : "Off-campus",
+    items: [],
+    external: ext,
+    totals: {
+      ...emptyTotals(),
+      calories: ext.calories ?? 0,
+      proteinG: ext.proteinG ?? 0,
+      totalCarbsG: ext.carbsG ?? 0,
+      totalFatG: ext.fatG ?? 0,
+    },
+  };
+}
+
+function derivePinnedFromPlan(plan: PlanResult): PinnedMap {
+  const map: PinnedMap = {};
+  plan.days.forEach((d, i) => {
+    for (const m of d.meals) {
+      if (m.period === "late_lunch") continue;
+      if (m.pinned) {
+        map[`${i}-${m.period}` as SlotKey] = m;
+      }
+    }
+  });
+  return map;
+}
+
+function deriveExternalFromPlan(plan: PlanResult): ExternalMap {
+  const map: ExternalMap = {};
+  plan.days.forEach((d, i) => {
+    for (const m of d.meals) {
+      if (m.period === "late_lunch") continue;
+      if (m.external) {
+        map[`${i}-${m.period}` as SlotKey] = m.external;
+      }
+    }
+  });
+  return map;
 }
 
 function recomputeDayTotals(
@@ -123,18 +199,43 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
   const [activeDay, setActiveDay] = useState(0);
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const { prefs, setRating, clear: clearPrefs, hydrated } = usePreferences();
+  // Pinned and external are seeded from the current plan so transitions
+  // through the wizard or refreshes don't drop user customizations.
+  const [pinned, setPinned] = useState<PinnedMap>(() =>
+    derivePinnedFromPlan(plan)
+  );
+  const [external, setExternal] = useState<ExternalMap>(() =>
+    deriveExternalFromPlan(plan)
+  );
+
   const day = plan.days[activeDay];
   const t = plan.targets;
 
   const handleRegenerate = async (
     dayIndex: number,
-    period: "breakfast" | "lunch" | "dinner"
+    period: CampusPeriod
   ) => {
     const key = `${dayIndex}-${period}`;
     setRegenerating(key);
     try {
       const meal = plan.days[dayIndex].meals.find((m) => m.period === period);
       const exclude = meal?.items.map((i) => i.recipeId) ?? [];
+      // Subtract any same-day external macros so the swap respects them too.
+      const sameDayExternal = (
+        ["breakfast", "lunch", "dinner"] as CampusPeriod[]
+      )
+        .filter((p) => p !== period)
+        .map((p) => external[`${dayIndex}-${p}` as SlotKey])
+        .filter((m): m is ExternalMeal => !!m)
+        .reduce<ExternalMeal | null>(
+          (acc, m) => ({
+            calories: (acc?.calories ?? 0) + (m.calories ?? 0),
+            proteinG: (acc?.proteinG ?? 0) + (m.proteinG ?? 0),
+            carbsG: (acc?.carbsG ?? 0) + (m.carbsG ?? 0),
+            fatG: (acc?.fatG ?? 0) + (m.fatG ?? 0),
+          }),
+          null
+        );
       const res = await fetch("/api/regenerate-meal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,6 +244,7 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
           period,
           excludeRecipeIds: exclude,
           ratings: prefs.items,
+          externalSameDay: sameDayExternal,
         }),
       });
       if (!res.ok) throw new Error(`Regenerate failed: ${res.status}`);
@@ -168,7 +270,12 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
       const res = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile, ratings: prefs.items }),
+        body: JSON.stringify({
+          profile,
+          ratings: prefs.items,
+          pinned,
+          external,
+        }),
       });
       if (!res.ok) throw new Error(`Rebuild failed: ${res.status}`);
       const newPlan = (await res.json()) as PlanResult;
@@ -184,7 +291,76 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
     setRating(recipeId, rating);
   };
 
+  const handleTogglePin = (dayIndex: number, period: CampusPeriod) => {
+    const slot = `${dayIndex}-${period}` as SlotKey;
+    setPinned((prev) => {
+      const next = { ...prev };
+      if (next[slot]) {
+        delete next[slot];
+      } else {
+        const meal = plan.days[dayIndex].meals.find(
+          (m) => m.period === period
+        );
+        if (meal && meal.items.length > 0) {
+          next[slot] = { ...meal, pinned: true };
+        }
+      }
+      return next;
+    });
+    // Also mark the current plan's meal as pinned for immediate visual feedback.
+    const newDays = plan.days.map((d, i) => {
+      if (i !== dayIndex) return d;
+      return {
+        ...d,
+        meals: d.meals.map((m) =>
+          m.period === period ? { ...m, pinned: !m.pinned } : m
+        ),
+      };
+    });
+    onPlanUpdate({ ...plan, days: newDays });
+  };
+
+  const handleSetExternal = (
+    dayIndex: number,
+    period: CampusPeriod,
+    value: ExternalMeal | null
+  ) => {
+    const slot = `${dayIndex}-${period}` as SlotKey;
+    setExternal((prev) => {
+      const next = { ...prev };
+      if (value) {
+        next[slot] = value;
+      } else {
+        delete next[slot];
+      }
+      return next;
+    });
+    // Reflect in the plan immediately. If clearing, revert to a stub
+    // selection so the slot still renders something while the user
+    // decides what to put there.
+    const newDays = plan.days.map((d, i) => {
+      if (i !== dayIndex) return d;
+      const newMeals = d.meals.map((m) => {
+        if (m.period !== period) return m;
+        if (value) {
+          return externalToMealSelection(period, value);
+        }
+        // Clearing — leave a blank stub; user can rebuild week to refill.
+        return {
+          period,
+          location: "—",
+          items: [],
+          totals: emptyTotals(),
+        };
+      });
+      return recomputeDayTotals({ ...d, meals: newMeals }, t);
+    });
+    onPlanUpdate({ ...plan, days: newDays });
+  };
+
   const counts = countByRating(prefs);
+  const customizationCount =
+    Object.keys(pinned).length + Object.keys(external).length;
 
   return (
     <div className="w-full animate-fade-up space-y-12">
@@ -299,6 +475,11 @@ export function PlanView({ plan, profile, onRestart, onPlanUpdate }: Props) {
           dayIndex={activeDay}
           prefs={prefs}
           onRate={handleRate}
+          onTogglePin={(period) => handleTogglePin(activeDay, period)}
+          onSetExternal={(period, value) =>
+            handleSetExternal(activeDay, period, value)
+          }
+          customizationCount={customizationCount}
         />
 
         <footer className="pt-8 border-t border-foreground/20 text-xs text-muted-foreground italic">
@@ -457,14 +638,20 @@ function DayBreakdown({
   dayIndex,
   prefs,
   onRate,
+  onTogglePin,
+  onSetExternal,
+  customizationCount,
 }: {
   day: PlanResult["days"][0];
   targets: PlanResult["targets"];
-  onRegenerate: (period: "breakfast" | "lunch" | "dinner") => void;
+  onRegenerate: (period: CampusPeriod) => void;
   regeneratingKey: string | null;
   dayIndex: number;
   prefs: PreferenceMap;
   onRate: (recipeId: string, rating: Preference | null) => void;
+  onTogglePin: (period: CampusPeriod) => void;
+  onSetExternal: (period: CampusPeriod, value: ExternalMeal | null) => void;
+  customizationCount: number;
 }) {
   return (
     <div className="space-y-10">
@@ -512,6 +699,16 @@ function DayBreakdown({
         </div>
       </section>
 
+      {customizationCount > 0 && (
+        <div className="text-[11px] text-carolina-deep eyebrow border-l-2 border-carolina pl-2">
+          {customizationCount} customization
+          {customizationCount === 1 ? "" : "s"} active —
+          <span className="text-foreground/70 normal-case tracking-normal ml-1 italic">
+            click &ldquo;Rebuild week&rdquo; above to apply them everywhere
+          </span>
+        </div>
+      )}
+
       <section className="space-y-8">
         {day.meals.map((meal, idx) => (
           <MealArticle
@@ -525,6 +722,13 @@ function DayBreakdown({
             }
             prefs={prefs}
             onRate={onRate}
+            onTogglePin={() => {
+              if (meal.period !== "late_lunch") onTogglePin(meal.period);
+            }}
+            onSetExternal={(value) => {
+              if (meal.period !== "late_lunch")
+                onSetExternal(meal.period, value);
+            }}
           />
         ))}
       </section>
@@ -590,16 +794,22 @@ function MealArticle({
   regenerating,
   prefs,
   onRate,
+  onTogglePin,
+  onSetExternal,
 }: {
   meal: MealSelection;
   onRegenerate: () => void;
   regenerating: boolean;
   prefs: PreferenceMap;
   onRate: (recipeId: string, rating: Preference | null) => void;
+  onTogglePin: () => void;
+  onSetExternal: (value: ExternalMeal | null) => void;
 }) {
   if (meal.period === "late_lunch") return null;
   const meta = MEAL_META[meal.period];
   const Icon = meta.icon;
+  const isExternal = !!meal.external;
+  const isPinned = !!meal.pinned;
   return (
     <article className="grid grid-cols-1 sm:grid-cols-12 gap-6 sm:gap-10 pb-8 border-b border-foreground/15 last:border-0">
       <header className="sm:col-span-3">
@@ -610,6 +820,24 @@ function MealArticle({
           <span className="size-8 inline-flex items-center justify-center bg-carolina-tint text-carolina-deep rounded-full">
             <Icon className="size-4" strokeWidth={1.5} />
           </span>
+          {isPinned && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-foreground text-paper text-[9px] uppercase tracking-wider"
+              title="Pinned — survives Rebuild week"
+            >
+              <Lock className="size-2.5" strokeWidth={2} />
+              Pinned
+            </span>
+          )}
+          {isExternal && (
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent text-accent-foreground text-[9px] uppercase tracking-wider"
+              title="Eating off-campus"
+            >
+              <LogOut className="size-2.5" strokeWidth={2} />
+              Off-campus
+            </span>
+          )}
         </div>
         <h3 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight mt-2">
           {meta.label}
@@ -643,27 +871,106 @@ function MealArticle({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          disabled={regenerating}
-          className="mt-4 inline-flex items-center gap-1.5 text-[11px] eyebrow text-foreground/70 hover:text-foreground border border-foreground/30 hover:border-foreground px-2.5 py-1.5 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {regenerating ? (
-            <>
-              <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
-              Swapping
-            </>
-          ) : (
-            <>
-              <Shuffle className="size-3" strokeWidth={1.5} />
-              Show alternatives
-            </>
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {!isExternal && (
+            <button
+              type="button"
+              onClick={onRegenerate}
+              disabled={regenerating || isPinned}
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] eyebrow border px-2.5 py-1.5 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                "text-foreground/70 hover:text-foreground border-foreground/30 hover:border-foreground"
+              )}
+              title={
+                isPinned ? "Unpin first to swap" : "Show alternative items"
+              }
+            >
+              {regenerating ? (
+                <>
+                  <Loader2 className="size-3 animate-spin" strokeWidth={1.5} />
+                  Swapping
+                </>
+              ) : (
+                <>
+                  <Shuffle className="size-3" strokeWidth={1.5} />
+                  Swap
+                </>
+              )}
+            </button>
           )}
-        </button>
+          {!isExternal && meal.items.length > 0 && (
+            <button
+              type="button"
+              onClick={onTogglePin}
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] eyebrow border px-2.5 py-1.5 cursor-pointer transition-colors",
+                isPinned
+                  ? "bg-foreground text-paper border-foreground"
+                  : "text-foreground/70 hover:text-foreground border-foreground/30 hover:border-foreground"
+              )}
+              title={isPinned ? "Unpin this meal" : "Pin this meal"}
+            >
+              {isPinned ? (
+                <>
+                  <Unlock className="size-3" strokeWidth={1.5} />
+                  Unpin
+                </>
+              ) : (
+                <>
+                  <Lock className="size-3" strokeWidth={1.5} />
+                  Pin
+                </>
+              )}
+            </button>
+          )}
+          {!isPinned && (
+            <button
+              type="button"
+              onClick={() =>
+                onSetExternal(
+                  isExternal ? null : { label: "", calories: 0, proteinG: 0 }
+                )
+              }
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] eyebrow border px-2.5 py-1.5 cursor-pointer transition-colors",
+                isExternal
+                  ? "bg-accent text-accent-foreground border-accent"
+                  : "text-foreground/70 hover:text-foreground border-foreground/30 hover:border-foreground"
+              )}
+              title={
+                isExternal
+                  ? "Restore campus meal"
+                  : "Mark this slot as off-campus"
+              }
+            >
+              {isExternal ? (
+                <>
+                  <X className="size-3" strokeWidth={1.5} />
+                  Bring back
+                </>
+              ) : (
+                <>
+                  <LogOut className="size-3" strokeWidth={1.5} />
+                  Eating out
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="sm:col-span-9">
+        {isExternal ? (
+          <ExternalMealCard
+            value={meal.external!}
+            onChange={(v) => onSetExternal(v)}
+          />
+        ) : meal.items.length === 0 ? (
+          <div className="border border-foreground/15 px-5 py-6 text-sm text-muted-foreground italic">
+            No meal scheduled for this slot. Toggle this meal back on at the
+            wizard step, or pick &ldquo;Eating out&rdquo; to log a custom slot.
+          </div>
+        ) : (
         <table className="w-full">
           <thead>
             <tr className="border-b border-foreground/30 text-left">
@@ -742,8 +1049,125 @@ function MealArticle({
             </tr>
           </tbody>
         </table>
+        )}
       </div>
     </article>
+  );
+}
+
+function ExternalMealCard({
+  value,
+  onChange,
+}: {
+  value: ExternalMeal;
+  onChange: (value: ExternalMeal) => void;
+}) {
+  return (
+    <div className="border border-accent/40 bg-accent/[0.04] px-5 py-5 space-y-4">
+      <div>
+        <div className="eyebrow text-accent">Off-campus</div>
+        <p className="text-sm text-foreground/80 mt-1 leading-relaxed">
+          You&apos;ll be eating elsewhere for this slot. Add a rough macro
+          estimate so the rest of the day still hits your target — or leave
+          blank to just skip.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3">
+        <ExternalField
+          label="Where"
+          placeholder="e.g. friend's place"
+          value={value.label ?? ""}
+          onChange={(s) => onChange({ ...value, label: s })}
+          mono={false}
+          cols={2}
+        />
+        <ExternalField
+          label="kcal"
+          value={value.calories?.toString() ?? ""}
+          numeric
+          onChange={(s) =>
+            onChange({
+              ...value,
+              calories: s ? Math.max(0, parseInt(s, 10) || 0) : undefined,
+            })
+          }
+        />
+        <ExternalField
+          label="Protein (g)"
+          value={value.proteinG?.toString() ?? ""}
+          numeric
+          onChange={(s) =>
+            onChange({
+              ...value,
+              proteinG: s ? Math.max(0, parseInt(s, 10) || 0) : undefined,
+            })
+          }
+        />
+        <ExternalField
+          label="Carbs (g)"
+          value={value.carbsG?.toString() ?? ""}
+          numeric
+          onChange={(s) =>
+            onChange({
+              ...value,
+              carbsG: s ? Math.max(0, parseInt(s, 10) || 0) : undefined,
+            })
+          }
+        />
+        <ExternalField
+          label="Fat (g)"
+          value={value.fatG?.toString() ?? ""}
+          numeric
+          onChange={(s) =>
+            onChange({
+              ...value,
+              fatG: s ? Math.max(0, parseInt(s, 10) || 0) : undefined,
+            })
+          }
+        />
+      </div>
+      <div className="text-[11px] text-muted-foreground italic leading-relaxed">
+        Macros are optional. If provided, &ldquo;Rebuild week&rdquo; will
+        subtract them from this day&apos;s target so the remaining campus
+        meals fill the gap.
+      </div>
+    </div>
+  );
+}
+
+function ExternalField({
+  label,
+  value,
+  onChange,
+  numeric = false,
+  mono = true,
+  placeholder,
+  cols = 1,
+}: {
+  label: string;
+  value: string;
+  onChange: (s: string) => void;
+  numeric?: boolean;
+  mono?: boolean;
+  placeholder?: string;
+  cols?: 1 | 2;
+}) {
+  return (
+    <div className={cn("space-y-1", cols === 2 && "col-span-2")}>
+      <label className="eyebrow text-foreground/55 block">{label}</label>
+      <input
+        type={numeric ? "number" : "text"}
+        inputMode={numeric ? "numeric" : "text"}
+        min={numeric ? 0 : undefined}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "h-9 w-full border-0 border-b border-foreground/30 bg-transparent px-0 py-1 text-sm transition-colors placeholder:text-muted-foreground/60 focus:outline-none focus:border-foreground focus:border-b-2",
+          mono && "font-mono-tabular tabular-nums"
+        )}
+      />
+    </div>
   );
 }
 

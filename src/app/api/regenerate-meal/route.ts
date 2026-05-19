@@ -36,10 +36,30 @@ const schema = z.object({
     ),
     proteinPerKg: z.number().min(0.8).max(3.5),
     fatPercent: z.number().min(0.15).max(0.5),
+    habits: z
+      .object({
+        mealsOnCampus: z
+          .array(z.enum(["breakfast", "lunch", "dinner"]))
+          .default(["breakfast", "lunch", "dinner"]),
+        weeklyCampusMeals: z
+          .enum(["few", "some", "most", "all"])
+          .default("most"),
+      })
+      .optional(),
   }),
   period: z.enum(["breakfast", "lunch", "dinner"]),
   excludeRecipeIds: z.array(z.string()).max(200).default([]),
   ratings: z.record(z.string(), z.enum(["love", "hate"])).default({}),
+  externalSameDay: z
+    .object({
+      label: z.string().max(120).optional(),
+      calories: z.number().min(0).max(3000).optional(),
+      proteinG: z.number().min(0).max(300).optional(),
+      carbsG: z.number().min(0).max(500).optional(),
+      fatG: z.number().min(0).max(300).optional(),
+    })
+    .nullable()
+    .default(null),
 });
 
 export async function POST(req: Request) {
@@ -56,7 +76,8 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const { profile, period, excludeRecipeIds, ratings } = parsed.data;
+  const { profile, period, excludeRecipeIds, ratings, externalSameDay } =
+    parsed.data;
   const targets = calculateTargets(profile as UserProfile);
   const meal = buildSingleMeal(
     menuData as MenuData,
@@ -64,7 +85,8 @@ export async function POST(req: Request) {
     targets,
     period,
     excludeRecipeIds,
-    ratings
+    ratings,
+    externalSameDay
   );
   return NextResponse.json({ meal });
 }

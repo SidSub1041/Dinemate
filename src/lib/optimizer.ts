@@ -1,5 +1,6 @@
 import type {
   DailyPlan,
+  ExternalMeal,
   MacroTargets,
   MealPeriod,
   MealSelection,
@@ -12,6 +13,21 @@ import type {
 
 /** Plain rating map exchanged with the API. */
 export type RatingMap = Record<string, "love" | "hate">;
+
+/** Key shape `${dayIndex}-${period}` used by clients to address a slot. */
+export type SlotKey = `${number}-${"breakfast" | "lunch" | "dinner"}`;
+
+/** A meal the user has locked — preserve verbatim across rebuilds. */
+export type PinnedMap = Record<SlotKey, MealSelection>;
+
+/** A meal the user marked as eating elsewhere. */
+export type ExternalMap = Record<SlotKey, ExternalMeal>;
+
+export interface BuildOptions {
+  ratings?: RatingMap;
+  pinned?: PinnedMap;
+  external?: ExternalMap;
+}
 
 interface ScoringContext {
   ratings: RatingMap;
@@ -358,12 +374,54 @@ export function buildSingleMeal(
   period: "breakfast" | "lunch" | "dinner",
   excludeRecipeIds: string[],
   ratings: RatingMap = {},
+  externalMacros: ExternalMeal | null = null,
   variantSeed: number = Math.floor(Math.random() * 1000)
 ): MealSelection {
-  const target = targetForMeal(period, targets);
+  const target = adjustTargetForExternals(
+    targetForMeal(period, targets),
+    externalMacros ? [externalMacros] : []
+  );
   const used = new Set<string>(excludeRecipeIds);
   const ctx = buildScoringContext(ratings, data);
   return buildMeal(data, period, target, profile, used, variantSeed, ctx);
+}
+
+/**
+ * Subtract any provided external macros from a per-meal target so the
+ * planner picks complementary items.
+ */
+function adjustTargetForExternals(
+  target: MealTarget,
+  externals: ExternalMeal[]
+): MealTarget {
+  let { calories, proteinG, carbsG, fatG } = target;
+  for (const ext of externals) {
+    if (ext.calories) calories = Math.max(0, calories - ext.calories);
+    if (ext.proteinG) proteinG = Math.max(0, proteinG - ext.proteinG);
+    if (ext.carbsG) carbsG = Math.max(0, carbsG - ext.carbsG);
+    if (ext.fatG) fatG = Math.max(0, fatG - ext.fatG);
+  }
+  return { calories, proteinG, carbsG, fatG };
+}
+
+function externalToSelection(
+  period: MealPeriod,
+  ext: ExternalMeal
+): MealSelection {
+  const totals = {
+    ...ZERO_NUTRITION,
+    calories: ext.calories ?? 0,
+    proteinG: ext.proteinG ?? 0,
+    totalCarbsG: ext.carbsG ?? 0,
+    totalFatG: ext.fatG ?? 0,
+  };
+  return {
+    period,
+    location: ext.label ?? "Off-campus",
+    items: [],
+    totals,
+    external: ext,
+  };
 }
 
 const MEAL_SPLIT: Record<"breakfast" | "lunch" | "dinner", number> = {
@@ -400,16 +458,73 @@ export function buildPlan(
   profile: UserProfile,
   targets: MacroTargets,
   days = 7,
-  ratings: RatingMap = {}
+  options: BuildOptions = {}
 ): PlanResult {
+  const ratings = options.ratings ?? {};
+  const pinned = options.pinned ?? {};
+  const external = options.external ?? {};
   const ctx = buildScoringContext(ratings, data);
+
+  // Which periods to actually plan, based on habit profile. We still
+  // emit a MealSelection for every period each day (so the UI can show
+  // empty slots), but unscheduled periods get a "skipped" marker.
+  const habitMeals = new Set(
+    profile.habits?.mealsOnCampus ?? ["breakfast", "lunch", "dinner"]
+  );
+
   const result: DailyPlan[] = [];
   for (let day = 0; day < days; day++) {
     const used = new Set<string>();
     const meals: MealSelection[] = [];
     for (const period of ["breakfast", "lunch", "dinner"] as const) {
-      const target = targetForMeal(period, targets);
-      const sel = buildMeal(data, period, target, profile, used, day * 7, ctx);
+      const slotKey = `${day}-${period}` as SlotKey;
+
+      // 1. Pinned: carry over verbatim and mark used so we don't repeat.
+      const pin = pinned[slotKey];
+      if (pin) {
+        for (const it of pin.items) used.add(it.recipeId);
+        meals.push({ ...pin, pinned: true });
+        continue;
+      }
+
+      // 2. External: user is eating elsewhere — emit a synthetic selection.
+      const ext = external[slotKey];
+      if (ext) {
+        meals.push(externalToSelection(period, ext));
+        continue;
+      }
+
+      // 3. Outside habit profile: skip the slot.
+      if (!habitMeals.has(period)) {
+        meals.push({
+          period,
+          location: "—",
+          items: [],
+          totals: { ...ZERO_NUTRITION },
+        });
+        continue;
+      }
+
+      // 4. Default: optimizer picks. Subtract any same-day external macros.
+      const sameDayExternals = (
+        ["breakfast", "lunch", "dinner"] as const
+      )
+        .filter((p) => p !== period)
+        .map((p) => external[`${day}-${p}` as SlotKey])
+        .filter((m): m is ExternalMeal => !!m);
+      const adjusted = adjustTargetForExternals(
+        targetForMeal(period, targets),
+        sameDayExternals
+      );
+      const sel = buildMeal(
+        data,
+        period,
+        adjusted,
+        profile,
+        used,
+        day * 7,
+        ctx
+      );
       meals.push(sel);
     }
     let dayTotals = { ...ZERO_NUTRITION };

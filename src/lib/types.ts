@@ -39,7 +39,24 @@ export interface UserProfile {
   avoidAllergens: Allergen[];
   proteinPerKg: number;
   fatPercent: number;
+  /** Optional: when omitted, treat as all-three-meals-on-campus. */
+  habits?: HabitProfile;
 }
+
+/**
+ * How a student actually eats on campus. Drives what gets scheduled.
+ */
+export interface HabitProfile {
+  /** Which meal periods to plan for. Empty = plan all three. */
+  mealsOnCampus: ("breakfast" | "lunch" | "dinner")[];
+  /** Rough weekly frequency: how many of those slots they actually use. */
+  weeklyCampusMeals: "few" | "some" | "most" | "all";
+}
+
+export const DEFAULT_HABITS: HabitProfile = {
+  mealsOnCampus: ["breakfast", "lunch", "dinner"],
+  weeklyCampusMeals: "most",
+};
 
 export interface MacroTargets {
   calories: number;
@@ -97,7 +114,28 @@ export interface MealSelection {
   location: string;
   items: MenuItem[];
   totals: NutritionFacts;
+  /** Off-campus override — user is eating elsewhere for this slot. */
+  external?: ExternalMeal;
+  /** Pinned — preserved through rebuild_all and regenerate operations. */
+  pinned?: boolean;
 }
+
+/**
+ * An "off-campus" meal slot. If macros are provided they get subtracted from
+ * the day's target so remaining campus meals still add up.
+ */
+export interface ExternalMeal {
+  label?: string;
+  calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+}
+
+/**
+ * Key used by client + optimizer to address a single day×period slot.
+ */
+export type MealSlotKey = `${number}-${"breakfast" | "lunch" | "dinner"}`;
 
 export interface DailyPlan {
   day: string;

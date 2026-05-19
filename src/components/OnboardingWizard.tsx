@@ -29,10 +29,15 @@ import type {
   Allergen,
   DietPreference,
   Goal,
+  HabitProfile,
   PlanResult,
   Sex,
   UserProfile,
 } from "@/lib/types";
+import { DEFAULT_HABITS } from "@/lib/types";
+
+type CampusMeal = "breakfast" | "lunch" | "dinner";
+type Frequency = HabitProfile["weeklyCampusMeals"];
 
 export interface FormState {
   age: number;
@@ -44,6 +49,8 @@ export interface FormState {
   goal: Goal | null;
   diet: DietPreference;
   avoidAllergens: Allergen[];
+  mealsOnCampus: CampusMeal[];
+  weeklyCampusMeals: Frequency;
 }
 
 export const DEFAULT_FORM: FormState = {
@@ -56,6 +63,8 @@ export const DEFAULT_FORM: FormState = {
   goal: null,
   diet: "none",
   avoidAllergens: [],
+  mealsOnCampus: DEFAULT_HABITS.mealsOnCampus,
+  weeklyCampusMeals: DEFAULT_HABITS.weeklyCampusMeals,
 };
 
 interface Props {
@@ -120,6 +129,14 @@ const STEPS: StepMeta[] = [
       "The dining hall labels every dish for vegan, vegetarian, halal, gluten-free and the major allergens.",
     pullAttrib: "Carolina Dining Services",
   },
+  {
+    id: 5,
+    name: "Habits",
+    image: WIZARD_GOAL,
+    pullQuote:
+      "Most undergrads eat on campus for about two meals a day. Tell us where to slot the rest.",
+    pullAttrib: "On planning for reality",
+  },
 ];
 
 export function OnboardingWizard({
@@ -160,6 +177,7 @@ export function OnboardingWizard({
       );
     if (step === 2) return form.activity !== null;
     if (step === 3) return form.goal !== null;
+    if (step === 5) return form.mealsOnCampus.length > 0;
     return true;
   };
 
@@ -176,6 +194,12 @@ export function OnboardingWizard({
       avoidAllergens: form.avoidAllergens,
       proteinPerKg: defaultProteinPerKg(goal),
       fatPercent: defaultFatPercent(goal),
+      habits: {
+        mealsOnCampus: form.mealsOnCampus.length
+          ? form.mealsOnCampus
+          : (["breakfast", "lunch", "dinner"] as CampusMeal[]),
+        weeklyCampusMeals: form.weeklyCampusMeals,
+      },
     };
   };
 
@@ -410,6 +434,78 @@ export function OnboardingWizard({
                     />
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-8">
+              <header>
+                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                  When are you actually eating on campus?
+                </h2>
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                  Most students aren&apos;t at the dining hall for every meal.
+                  Tell us roughly when you are — we&apos;ll plan only those
+                  slots and you can mark off-campus meals later.
+                </p>
+              </header>
+
+              <div className="space-y-3">
+                <Label>Meals you usually eat on campus</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(["breakfast", "lunch", "dinner"] as CampusMeal[]).map(
+                    (m) => (
+                      <ChipToggle
+                        key={m}
+                        label={m.charAt(0).toUpperCase() + m.slice(1)}
+                        checked={form.mealsOnCampus.includes(m)}
+                        onChange={(checked) =>
+                          update(
+                            "mealsOnCampus",
+                            checked
+                              ? [...form.mealsOnCampus, m]
+                              : form.mealsOnCampus.filter((x) => x !== m)
+                          )
+                        }
+                      />
+                    )
+                  )}
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-relaxed pt-1">
+                  At least one. We&apos;ll only schedule plans for these meals.
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>About how often per week?</Label>
+                <SegmentedControl<Frequency>
+                  layout="grid"
+                  options={[
+                    {
+                      value: "few",
+                      label: "A few times",
+                      description: "Mostly eat elsewhere",
+                    },
+                    {
+                      value: "some",
+                      label: "About half the week",
+                      description: "Some weekdays only",
+                    },
+                    {
+                      value: "most",
+                      label: "Most days",
+                      description: "Default for residents",
+                    },
+                    {
+                      value: "all",
+                      label: "Every chosen slot",
+                      description: "Maximally on-plan",
+                    },
+                  ]}
+                  value={form.weeklyCampusMeals}
+                  onChange={(v) => update("weeklyCampusMeals", v)}
+                />
               </div>
             </div>
           )}
