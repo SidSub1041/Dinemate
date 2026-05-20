@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession, signOut as clientSignOut } from "next-auth/react";
 import { LogIn, User as UserIcon, LogOut } from "lucide-react";
 import { useProfile } from "@/lib/use-app-data";
-import { signOutAction } from "@/lib/auth-actions";
 import { cn } from "@/lib/utils";
 
 interface NavLink {
@@ -148,16 +147,23 @@ function AccountMenu({ name }: { name: string }) {
           >
             Customize profile
           </Link>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-foreground/5 cursor-pointer inline-flex items-center gap-2 border-t border-foreground/10"
-              role="menuitem"
-            >
-              <LogOut className="size-3.5" strokeWidth={1.5} />
-              Sign out
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={() => {
+              // Client-side signOut clears the SessionProvider cache and the
+              // cookie in one round-trip. We then hard-reload to / so the
+              // SyncManager and SiteNav both re-hydrate against the empty
+              // session.
+              clientSignOut({ redirect: false }).then(() => {
+                window.location.href = "/";
+              });
+            }}
+            className="w-full text-left px-4 py-2.5 text-sm hover:bg-foreground/5 cursor-pointer inline-flex items-center gap-2 border-t border-foreground/10"
+            role="menuitem"
+          >
+            <LogOut className="size-3.5" strokeWidth={1.5} />
+            Sign out
+          </button>
         </div>
       )}
     </div>

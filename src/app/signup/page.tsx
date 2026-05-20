@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
-import { signUpAction } from "@/lib/auth-actions";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -23,11 +22,42 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
     const data = new FormData(e.currentTarget);
+    const email = String(data.get("email") ?? "")
+      .trim()
+      .toLowerCase();
+    const name = String(data.get("name") ?? "").trim();
+    const password = String(data.get("password") ?? "");
+    if (!email || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+    if (password.length < 10) {
+      setError("Password must be at least 10 characters.");
+      return;
+    }
     startTransition(async () => {
-      const result = await signUpAction(data);
-      if (result && "error" in result) {
-        setError(result.error);
+      // Step 1: server creates the user (POST /api/auth/signup) and hashes
+      // the password. Step 2: client signs in to keep the session cache fresh.
+      const r = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, password }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({ error: "Signup failed." }));
+        setError(body.error ?? "Signup failed.");
+        return;
       }
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+      if (!res || res.error) {
+        setError("Signed up but couldn't sign in automatically. Please try signing in.");
+        return;
+      }
+      window.location.href = "/plan";
     });
   };
 

@@ -11,13 +11,16 @@ declare global {
 }
 
 function createClient(): PrismaClient {
+  // Runtime prefers the pooled URL; falls back to non-pooled if that's all
+  // we have. Vercel injects POSTGRES_URL automatically.
   const connectionString =
     process.env.POSTGRES_URL ??
+    process.env.POSTGRES_PRISMA_URL ??
     process.env.DATABASE_URL ??
-    process.env.POSTGRES_PRISMA_URL;
+    process.env.POSTGRES_URL_NON_POOLING;
   if (!connectionString) {
     throw new Error(
-      "POSTGRES_URL / DATABASE_URL is not set. Run `npx vercel env pull .env.local` after provisioning Vercel Postgres."
+      "POSTGRES_URL is not set. Paste your Vercel Postgres connection strings into .env.local."
     );
   }
   const adapter = new PrismaPg({ connectionString });

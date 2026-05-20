@@ -83,7 +83,9 @@ export function useStoredState<T>(
     };
     const onCustom = (e: Event) => {
       const det = (e as StorageBroadcast).detail;
-      if (det?.key === key) {
+      // "*" is a bulk-write marker (used by the sync engine after bootstrap)
+      // and means "all keys may have changed — re-read".
+      if (det?.key === key || det?.key === "*") {
         setValue(safeRead<T>(key, initial));
       }
     };

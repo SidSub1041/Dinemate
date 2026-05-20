@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Check, CircleSlash2, NotebookPen, X } from "lucide-react";
 import {
   useProfile,
@@ -56,6 +57,7 @@ function plannedSelectionFor(
 
 export default function LogPage() {
   const router = useRouter();
+  const { status } = useSession();
   const { profile, hydrated: profileHydrated } = useProfile();
   const { plan } = useStoredPlan();
   const {
@@ -66,6 +68,13 @@ export default function LogPage() {
   } = useEatenLog();
   const { meals: customMeals } = useCustomMeals();
   const [date, setDate] = useState(todayISO());
+  const [bootstrapWindowClosed, setBootstrapWindowClosed] = useState(false);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const t = setTimeout(() => setBootstrapWindowClosed(true), 4000);
+    return () => clearTimeout(t);
+  }, [status]);
 
   // All hooks must be called before any conditional early return.
   const todayEntries = useMemo(() => {
@@ -82,12 +91,26 @@ export default function LogPage() {
   );
 
   useEffect(() => {
-    if (profileHydrated && !profile) {
-      router.replace("/");
-    }
-  }, [profileHydrated, profile, router]);
+    if (!profileHydrated) return;
+    if (profile) return;
+    if (status === "loading") return;
+    if (status === "authenticated" && !bootstrapWindowClosed) return;
+    router.replace("/");
+  }, [profileHydrated, profile, status, bootstrapWindowClosed, router]);
 
-  if (!profileHydrated || !logHydrated || !profile) {
+  if (
+    !profileHydrated ||
+    !logHydrated ||
+    (status === "authenticated" && !profile && !bootstrapWindowClosed)
+  ) {
+    return (
+      <div className="container mx-auto px-5 sm:px-8 py-24 text-center">
+        <span className="eyebrow text-foreground/50">Loading…</span>
+      </div>
+    );
+  }
+
+  if (!profile) {
     return (
       <div className="container mx-auto px-5 sm:px-8 py-24 text-center">
         <span className="eyebrow text-foreground/50">Loading…</span>

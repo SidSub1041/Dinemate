@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useProfile, useStoredPlan } from "@/lib/use-app-data";
 import { PlanView } from "@/components/PlanView";
 import { Button } from "@/components/ui/Button";
@@ -10,18 +11,35 @@ import { ArrowRight } from "lucide-react";
 
 export default function PlanPage() {
   const router = useRouter();
+  const { status } = useSession();
   const { profile, hydrated: profileHydrated } = useProfile();
   const { plan, setPlan, hydrated: planHydrated } = useStoredPlan();
   const ready = profileHydrated && planHydrated;
+  const [bootstrapWindowClosed, setBootstrapWindowClosed] = useState(false);
 
-  // No profile? Bounce home so the wizard can run.
+  // Give the SyncManager up to 4 seconds to populate localStorage from the
+  // server before we give up and assume the user truly has no plan yet.
   useEffect(() => {
-    if (ready && !profile) {
-      router.replace("/");
-    }
-  }, [ready, profile, router]);
+    if (status !== "authenticated") return;
+    const t = setTimeout(() => setBootstrapWindowClosed(true), 4000);
+    return () => clearTimeout(t);
+  }, [status]);
 
-  if (!ready) {
+  // Redirect home only when:
+  //   - we're hydrated, AND
+  //   - we have no profile, AND
+  //   - either the user is unauthenticated OR the bootstrap window has
+  //     already elapsed without producing a profile.
+  useEffect(() => {
+    if (!ready) return;
+    if (profile) return;
+    if (status === "loading") return;
+    if (status === "authenticated" && !bootstrapWindowClosed) return;
+    router.replace("/");
+  }, [ready, profile, status, bootstrapWindowClosed, router]);
+
+  // While authenticated and waiting on bootstrap, show a loading shell.
+  if (!ready || (status === "authenticated" && !profile && !bootstrapWindowClosed)) {
     return <LoadingState />;
   }
 

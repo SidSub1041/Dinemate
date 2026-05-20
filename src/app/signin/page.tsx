@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
-import { signInAction } from "@/lib/auth-actions";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -23,11 +22,29 @@ export default function SignInPage() {
     e.preventDefault();
     setError(null);
     const data = new FormData(e.currentTarget);
+    const email = String(data.get("email") ?? "")
+      .trim()
+      .toLowerCase();
+    const password = String(data.get("password") ?? "");
+    if (!email || !password) {
+      setError("Email and password are required.");
+      return;
+    }
     startTransition(async () => {
-      const result = await signInAction(data);
-      if (result && "error" in result) {
-        setError(result.error);
+      // Client-side signIn keeps the SessionProvider cache in sync. The
+      // server action variant left useSession stale until the next poll.
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+      if (!res || res.error) {
+        setError("Invalid email or password.");
+        return;
       }
+      // Hard refresh so layout-level providers re-hydrate against the
+      // fresh session cookie before the destination mounts.
+      window.location.href = "/plan";
     });
   };
 

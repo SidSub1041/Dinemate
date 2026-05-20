@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   ArrowRight,
   Loader2,
@@ -57,17 +58,38 @@ const SECTIONS: { id: Section; label: string; icon: typeof Sliders }[] = [
 
 export default function CustomizePage() {
   const router = useRouter();
+  const { status } = useSession();
   const { profile, setProfile, hydrated: profileHydrated } = useProfile();
   const { setPlan } = useStoredPlan();
   const [section, setSection] = useState<Section>("profile");
+  const [bootstrapWindowClosed, setBootstrapWindowClosed] = useState(false);
 
   useEffect(() => {
-    if (profileHydrated && !profile) {
-      router.replace("/");
-    }
-  }, [profileHydrated, profile, router]);
+    if (status !== "authenticated") return;
+    const t = setTimeout(() => setBootstrapWindowClosed(true), 4000);
+    return () => clearTimeout(t);
+  }, [status]);
 
-  if (!profileHydrated || !profile) {
+  useEffect(() => {
+    if (!profileHydrated) return;
+    if (profile) return;
+    if (status === "loading") return;
+    if (status === "authenticated" && !bootstrapWindowClosed) return;
+    router.replace("/");
+  }, [profileHydrated, profile, status, bootstrapWindowClosed, router]);
+
+  if (
+    !profileHydrated ||
+    (status === "authenticated" && !profile && !bootstrapWindowClosed)
+  ) {
+    return (
+      <div className="container mx-auto px-5 sm:px-8 py-24 text-center">
+        <span className="eyebrow text-foreground/50">Loading…</span>
+      </div>
+    );
+  }
+
+  if (!profile) {
     return (
       <div className="container mx-auto px-5 sm:px-8 py-24 text-center">
         <span className="eyebrow text-foreground/50">Loading…</span>
