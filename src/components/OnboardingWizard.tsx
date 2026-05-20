@@ -30,11 +30,13 @@ import type {
   DietPreference,
   Goal,
   HabitProfile,
+  MealPlanTier,
   PlanResult,
   Sex,
   UserProfile,
 } from "@/lib/types";
 import { DEFAULT_HABITS } from "@/lib/types";
+import { MEAL_PLAN_TIERS, getMealPlanTier } from "@/lib/locations";
 
 type CampusMeal = "breakfast" | "lunch" | "dinner";
 type Frequency = HabitProfile["weeklyCampusMeals"];
@@ -51,6 +53,16 @@ export interface FormState {
   avoidAllergens: Allergen[];
   mealsOnCampus: CampusMeal[];
   weeklyCampusMeals: Frequency;
+  // Step 6 — schedule
+  wakeTime: string;
+  sleepTime: string;
+  breakfastAt: string;
+  lunchAt: string;
+  dinnerAt: string;
+  // Step 7 — meal plan
+  mealPlanTier: MealPlanTier;
+  swipesRemaining: number;
+  plusRemaining: number;
 }
 
 export const DEFAULT_FORM: FormState = {
@@ -65,6 +77,14 @@ export const DEFAULT_FORM: FormState = {
   avoidAllergens: [],
   mealsOnCampus: DEFAULT_HABITS.mealsOnCampus,
   weeklyCampusMeals: DEFAULT_HABITS.weeklyCampusMeals,
+  wakeTime: "07:30",
+  sleepTime: "23:30",
+  breakfastAt: "08:30",
+  lunchAt: "12:30",
+  dinnerAt: "18:30",
+  mealPlanTier: "all-access",
+  swipesRemaining: 21,
+  plusRemaining: 3,
 };
 
 interface Props {
@@ -137,6 +157,22 @@ const STEPS: StepMeta[] = [
       "Most undergrads eat on campus for about two meals a day. Tell us where to slot the rest.",
     pullAttrib: "On planning for reality",
   },
+  {
+    id: 6,
+    name: "Schedule",
+    image: WIZARD_VITALS,
+    pullQuote:
+      "If your only break is at 4pm, we'll plan against the Late Lunch menu instead of regular lunch.",
+    pullAttrib: "On the actual week",
+  },
+  {
+    id: 7,
+    name: "Meal plan",
+    image: WIZARD_DIET,
+    pullQuote:
+      "Regular swipes work at Lenoir and Chase. PLUS swipes work at retail. We pick accordingly.",
+    pullAttrib: "Carolina Dining Services",
+  },
 ];
 
 export function OnboardingWizard({
@@ -199,6 +235,18 @@ export function OnboardingWizard({
           ? form.mealsOnCampus
           : (["breakfast", "lunch", "dinner"] as CampusMeal[]),
         weeklyCampusMeals: form.weeklyCampusMeals,
+      },
+      schedule: {
+        wakeTime: form.wakeTime,
+        sleepTime: form.sleepTime,
+        breakfastAt: form.breakfastAt,
+        lunchAt: form.lunchAt,
+        dinnerAt: form.dinnerAt,
+      },
+      mealPlan: {
+        tier: form.mealPlanTier,
+        weeklySwipes: form.swipesRemaining,
+        weeklyPlusSwipes: form.plusRemaining,
       },
     };
   };
@@ -510,6 +558,133 @@ export function OnboardingWizard({
             </div>
           )}
 
+          {step === 6 && (
+            <div className="space-y-8">
+              <header>
+                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                  Your actual schedule.
+                </h2>
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                  We use sleep + meal times to pull the right menu — if your
+                  break is at 4pm, that&apos;s Late Lunch, not Lunch.
+                </p>
+              </header>
+
+              <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                <TimeField
+                  label="Wake up"
+                  value={form.wakeTime}
+                  onChange={(v) => update("wakeTime", v)}
+                />
+                <TimeField
+                  label="Sleep"
+                  value={form.sleepTime}
+                  onChange={(v) => update("sleepTime", v)}
+                />
+              </div>
+
+              <div>
+                <Label className="mb-3 block">When do you eat each meal?</Label>
+                <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                  <TimeField
+                    label="Breakfast"
+                    value={form.breakfastAt}
+                    onChange={(v) => update("breakfastAt", v)}
+                  />
+                  <TimeField
+                    label="Lunch"
+                    value={form.lunchAt}
+                    onChange={(v) => update("lunchAt", v)}
+                  />
+                  <TimeField
+                    label="Dinner"
+                    value={form.dinnerAt}
+                    onChange={(v) => update("dinnerAt", v)}
+                  />
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-relaxed pt-3">
+                  Class at noon and only free at 4pm? Set lunch to 16:00 —
+                  we&apos;ll pull from the Late Lunch menu instead of regular
+                  Lunch.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 7 && (
+            <div className="space-y-8">
+              <header>
+                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                  What&apos;s your meal plan?
+                </h2>
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                  Regular swipes work at Lenoir and Chase. PLUS swipes work at
+                  retail spots like Chick-fil-A and Subway. We pick locations
+                  you can actually pay at.
+                </p>
+              </header>
+
+              <div className="space-y-3">
+                <Label>Plan tier</Label>
+                <SegmentedControl<MealPlanTier>
+                  layout="stack"
+                  options={MEAL_PLAN_TIERS.map((t) => ({
+                    value: t.tier,
+                    label: t.label,
+                    description: t.description,
+                  }))}
+                  value={form.mealPlanTier}
+                  onChange={(v) => {
+                    const tier = getMealPlanTier(v);
+                    update("mealPlanTier", v);
+                    update("swipesRemaining", tier.weeklySwipes);
+                    update("plusRemaining", tier.weeklyPlusSwipes);
+                  }}
+                />
+              </div>
+
+              {form.mealPlanTier !== "none" && (
+                <div className="grid grid-cols-2 gap-x-8 gap-y-6 pt-2">
+                  <div className="space-y-2">
+                    <Label>Regular swipes left this week</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={form.swipesRemaining}
+                      onChange={(e) =>
+                        update(
+                          "swipesRemaining",
+                          Math.max(0, parseInt(e.target.value || "0"))
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>PLUS swipes left this week</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={form.plusRemaining}
+                      onChange={(e) =>
+                        update(
+                          "plusRemaining",
+                          Math.max(0, parseInt(e.target.value || "0"))
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="col-span-2 text-[11px] text-muted-foreground leading-relaxed">
+                    We&apos;ll prefer locations that fit your balance — Lenoir
+                    and Chase first if you have regular swipes, retail when
+                    you&apos;re out.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {error && (
             <div className="mt-8 border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger">
               <span className="eyebrow text-danger mr-2">Error</span>
@@ -596,6 +771,28 @@ export function OnboardingWizard({
           </blockquote>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function TimeField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <input
+        type="time"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-full rounded-[var(--radius-sm)] border-0 border-b border-foreground/30 bg-transparent px-0 py-2 font-mono-tabular text-base font-medium text-foreground transition-colors focus:outline-none focus:border-foreground focus:border-b-2 cursor-pointer"
+      />
     </div>
   );
 }

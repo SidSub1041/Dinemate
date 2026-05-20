@@ -7,9 +7,11 @@ import type {
   MenuData,
   MenuItem,
   NutritionFacts,
+  PaymentType,
   PlanResult,
   UserProfile,
 } from "./types";
+import { locationPaymentType, periodForTime } from "./locations";
 
 /** Plain rating map exchanged with the API. */
 export type RatingMap = Record<string, "love" | "hate">;
@@ -187,6 +189,8 @@ function passesDiet(item: MenuItem, profile: UserProfile): boolean {
 
 interface ItemWithLocation extends MenuItem {
   locationName: string;
+  locationSlug: string;
+  paymentType: PaymentType;
 }
 
 function flattenMenu(
@@ -194,8 +198,44 @@ function flattenMenu(
   period: MealPeriod
 ): ItemWithLocation[] {
   return data.locations.flatMap((loc) =>
-    loc.meals[period].map((it) => ({ ...it, locationName: loc.name }))
+    loc.meals[period].map((it) => ({
+      ...it,
+      locationName: loc.name,
+      locationSlug: loc.slug,
+      paymentType: locationPaymentType(loc.slug),
+    }))
   );
+}
+
+/** Group the candidate pool by location so we can build a meal per-location. */
+function groupByLocation(
+  items: ItemWithLocation[]
+): Map<string, ItemWithLocation[]> {
+  const m = new Map<string, ItemWithLocation[]>();
+  for (const it of items) {
+    const arr = m.get(it.locationSlug);
+    if (arr) arr.push(it);
+    else m.set(it.locationSlug, [it]);
+  }
+  return m;
+}
+
+/**
+ * Which payment types are eligible for the user, based on their plan tier
+ * and remaining weekly swipes. Soft signals only — we never hide locations
+ * if the user is going to run out; we just prioritize the cheaper option.
+ */
+function eligiblePayments(profile: UserProfile): Set<PaymentType> {
+  const plan = profile.mealPlan;
+  if (!plan || plan.tier === "none") {
+    // No plan declared — everything's on the table.
+    return new Set<PaymentType>(["swipe", "plus", "flex"]);
+  }
+  if (plan.tier === "flex-only") {
+    return new Set<PaymentType>(["plus", "flex"]);
+  }
+  // Most other plans allow both swipe + plus + flex.
+  return new Set<PaymentType>(["swipe", "plus", "flex"]);
 }
 
 interface MealTarget {
@@ -312,6 +352,33 @@ function buildMealForLocation(
   };
 }
 
+interface SwipeBudget {
+  /** Remaining regular swipes the user can spend this week. */
+  swipe: number;
+  /** Remaining PLUS swipes the user can spend this week. */
+  plus: number;
+}
+
+/** Soft preference applied to a location based on the user's plan + budget. */
+function paymentPreferenceBonus(
+  paymentType: PaymentType,
+  profile: UserProfile,
+  budget: SwipeBudget | null
+): number {
+  if (!budget) return 0;
+  if (paymentType === "swipe") {
+    if (budget.swipe <= 0) return -150; // user is out of regular swipes
+    if (budget.swipe < 3) return -40; // running low — discourage
+    return 30; // typically cheapest, favor swipes
+  }
+  if (paymentType === "plus") {
+    if (budget.plus <= 0) return -120; // burning into Flex dollars
+    if (budget.plus <= 1) return -30;
+    return 10;
+  }
+  return -20; // flex/dollars — least preferred
+}
+
 function buildMeal(
   data: MenuData,
   period: MealPeriod,
@@ -319,11 +386,14 @@ function buildMeal(
   profile: UserProfile,
   used: Set<string>,
   variantSeed: number,
-  ctx: ScoringContext
+  ctx: ScoringContext,
+  budget: SwipeBudget | null
 ): MealSelection {
+  const eligible = eligiblePayments(profile);
   const all = flattenMenu(data, period)
     .filter(isPlausibleEntree)
     .filter((it) => passesDiet(it, profile))
+    .filter((it) => eligible.has(it.paymentType))
     // Hate filter: never serve up an explicitly hated item.
     .filter((it) => ctx.ratings[it.recipeId] !== "hate");
 
@@ -336,13 +406,31 @@ function buildMeal(
     };
   }
 
-  // Try multiple anchor variants to diversify days and pick the best.
-  const candidates: BuiltMeal[] = [];
-  for (let v = 0; v < 6; v++) {
-    const built = buildMealForLocation(all, target, used, variantSeed + v, ctx);
-    if (built) candidates.push(built);
+  // KEY CHANGE: iterate per location. Each candidate is built using items
+  // from a single location only, so the final selection never mixes
+  // Lenoir + Subway in the same meal.
+  const groups = groupByLocation(all);
+  const allCandidates: BuiltMeal[] = [];
+  for (const [, locItems] of groups) {
+    // Inside one location, try a handful of anchor variants.
+    for (let v = 0; v < 4; v++) {
+      const built = buildMealForLocation(
+        locItems,
+        target,
+        used,
+        variantSeed + v,
+        ctx
+      );
+      if (!built) continue;
+      // Add the payment-preference bonus to bias toward the user's plan.
+      const payment = locationPaymentType(
+        (built.items[0]?.locationSlug as string) ?? ""
+      );
+      built.score += paymentPreferenceBonus(payment, profile, budget);
+      allCandidates.push(built);
+    }
   }
-  if (candidates.length === 0) {
+  if (allCandidates.length === 0) {
     return {
       period,
       location: "—",
@@ -350,9 +438,18 @@ function buildMeal(
       totals: { ...ZERO_NUTRITION },
     };
   }
-  candidates.sort((a, b) => b.score - a.score);
-  const winner = candidates[0];
+  allCandidates.sort((a, b) => b.score - a.score);
+  const winner = allCandidates[0];
   for (const it of winner.items) used.add(it.recipeId);
+
+  // Deduct one budget unit based on the location's payment type.
+  if (budget) {
+    const winnerPayment = locationPaymentType(
+      (winner.items[0]?.locationSlug as string) ?? ""
+    );
+    if (winnerPayment === "swipe") budget.swipe = Math.max(0, budget.swipe - 1);
+    else if (winnerPayment === "plus") budget.plus = Math.max(0, budget.plus - 1);
+  }
 
   return {
     period,
@@ -366,6 +463,9 @@ function buildMeal(
  * Build a single meal selection for the given period, excluding any item recipe
  * IDs the caller has already shown. Used by /api/regenerate-meal so the user can
  * cycle through alternative options without rebuilding the entire week.
+ *
+ * Doesn't track swipe budget — single-meal regenerates always use the user's
+ * full eligibility pool. Whole-week rebuilds are where budgeting kicks in.
  */
 export function buildSingleMeal(
   data: MenuData,
@@ -383,7 +483,30 @@ export function buildSingleMeal(
   );
   const used = new Set<string>(excludeRecipeIds);
   const ctx = buildScoringContext(ratings, data);
-  return buildMeal(data, period, target, profile, used, variantSeed, ctx);
+  const menuPeriod = effectiveMenuPeriod(period, profile);
+  return buildMeal(data, menuPeriod, target, profile, used, variantSeed, ctx, null);
+}
+
+/**
+ * Map the user's notion of a meal slot ("lunch") to the dining-hall menu
+ * period we should query ("late_lunch" if they eat at 4pm).
+ */
+function effectiveMenuPeriod(
+  userPeriod: "breakfast" | "lunch" | "dinner",
+  profile: UserProfile
+): MealPeriod {
+  const sched = profile.schedule;
+  if (!sched) return userPeriod;
+  if (userPeriod === "breakfast" && sched.breakfastAt) {
+    return periodForTime(sched.breakfastAt);
+  }
+  if (userPeriod === "lunch" && sched.lunchAt) {
+    return periodForTime(sched.lunchAt);
+  }
+  if (userPeriod === "dinner" && sched.dinnerAt) {
+    return periodForTime(sched.dinnerAt);
+  }
+  return userPeriod;
 }
 
 /**
@@ -465,6 +588,15 @@ export function buildPlan(
   const external = options.external ?? {};
   const ctx = buildScoringContext(ratings, data);
 
+  // Initialize the weekly swipe budget from the user's meal plan info so
+  // we don't over-prescribe regular swipes when they're on Block 100.
+  const budget: SwipeBudget | null = profile.mealPlan
+    ? {
+        swipe: profile.mealPlan.weeklySwipes,
+        plus: profile.mealPlan.weeklyPlusSwipes,
+      }
+    : null;
+
   // Which periods to actually plan, based on habit profile. We still
   // emit a MealSelection for every period each day (so the UI can show
   // empty slots), but unscheduled periods get a "skipped" marker.
@@ -516,14 +648,16 @@ export function buildPlan(
         targetForMeal(period, targets),
         sameDayExternals
       );
+      const menuPeriod = effectiveMenuPeriod(period, profile);
       const sel = buildMeal(
         data,
-        period,
+        menuPeriod,
         adjusted,
         profile,
         used,
         day * 7,
-        ctx
+        ctx,
+        budget
       );
       meals.push(sel);
     }

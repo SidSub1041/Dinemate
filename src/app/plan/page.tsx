@@ -25,15 +25,17 @@ export default function PlanPage() {
     return () => clearTimeout(t);
   }, [status]);
 
-  // Redirect home only when:
-  //   - we're hydrated, AND
-  //   - we have no profile, AND
-  //   - either the user is unauthenticated OR the bootstrap window has
-  //     already elapsed without producing a profile.
+  // Auth gate: anonymous users go to /signin. Otherwise:
+  //   - if hydrated and we have no profile, wait for bootstrap; after the
+  //     window closes, send them home (the landing handles the wizard).
   useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      router.replace("/signin");
+      return;
+    }
     if (!ready) return;
     if (profile) return;
-    if (status === "loading") return;
     if (status === "authenticated" && !bootstrapWindowClosed) return;
     router.replace("/");
   }, [ready, profile, status, bootstrapWindowClosed, router]);

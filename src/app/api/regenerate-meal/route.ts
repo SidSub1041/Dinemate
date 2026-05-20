@@ -46,6 +46,32 @@ const schema = z.object({
           .default("most"),
       })
       .optional(),
+    schedule: z
+      .object({
+        wakeTime: z.string().regex(/^\d{2}:\d{2}$/),
+        sleepTime: z.string().regex(/^\d{2}:\d{2}$/),
+        breakfastAt: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        lunchAt: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        dinnerAt: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+      })
+      .optional(),
+    mealPlan: z
+      .object({
+        tier: z.enum([
+          "all-access",
+          "block-200",
+          "block-160",
+          "block-120",
+          "block-100",
+          "off-campus-50",
+          "off-campus-35",
+          "flex-only",
+          "none",
+        ]),
+        weeklySwipes: z.number().int().min(0).max(50),
+        weeklyPlusSwipes: z.number().int().min(0).max(20),
+      })
+      .optional(),
   }),
   period: z.enum(["breakfast", "lunch", "dinner"]),
   excludeRecipeIds: z.array(z.string()).max(200).default([]),

@@ -3,8 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { ArrowRight, BookOpenText } from "lucide-react";
+import { ArrowRight, BookOpenText, Lock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   OnboardingWizard,
@@ -27,6 +28,8 @@ type Phase = "landing" | "wizard";
 
 export default function Page() {
   const router = useRouter();
+  const { status } = useSession();
+  const isAuthed = status === "authenticated";
   const { profile, setProfile, hydrated: profileHydrated } = useProfile();
   const { plan, setPlan, hydrated: planHydrated } = useStoredPlan();
   const [phase, setPhase] = useState<Phase>("landing");
@@ -63,17 +66,34 @@ export default function Page() {
   }, [phase]);
 
   const startWizard = (atStep = 1) => {
+    // Hard auth gate: anonymous users can't enter the wizard. They get
+    // funneled to sign-up, and after a successful sign-in / sign-up they
+    // are bounced back here, which then promotes them into the wizard.
+    if (!isAuthed) {
+      router.push("/signup");
+      return;
+    }
     setWizardStep(atStep);
     setPhase("wizard");
   };
 
   const hasExistingPlan = profileHydrated && planHydrated && !!profile && !!plan;
 
+  // First-time authed users with no profile yet land here — drop them
+  // straight into the wizard so the auth flow feels continuous.
+  useEffect(() => {
+    if (isAuthed && profileHydrated && planHydrated && !profile) {
+      setWizardStep(1);
+      setPhase("wizard");
+    }
+  }, [isAuthed, profileHydrated, planHydrated, profile]);
+
   return (
     <div className="flex-1 flex flex-col">
       {phase === "landing" && (
         <Landing
           hasExistingPlan={hasExistingPlan}
+          isAuthed={isAuthed}
           onStart={() => startWizard(1)}
           onOpenPlan={() => router.push("/plan")}
         />
@@ -99,16 +119,19 @@ export default function Page() {
 
 function Landing({
   hasExistingPlan,
+  isAuthed,
   onStart,
   onOpenPlan,
 }: {
   hasExistingPlan: boolean;
+  isAuthed: boolean;
   onStart: () => void;
   onOpenPlan: () => void;
 }) {
   return (
     <div className="animate-fade-up flex-1 flex flex-col">
       <Hero
+        isAuthed={isAuthed}
         hasExistingPlan={hasExistingPlan}
         onStart={onStart}
         onOpenPlan={onOpenPlan}
@@ -126,10 +149,12 @@ function Landing({
 
 function Hero({
   hasExistingPlan,
+  isAuthed,
   onStart,
   onOpenPlan,
 }: {
   hasExistingPlan: boolean;
+  isAuthed: boolean;
   onStart: () => void;
   onOpenPlan: () => void;
 }) {
@@ -182,7 +207,7 @@ function Hero({
                   Or rebuild from scratch →
                 </button>
               </>
-            ) : (
+            ) : isAuthed ? (
               <>
                 <Button
                   onClick={onStart}
@@ -198,6 +223,24 @@ function Hero({
                 >
                   How it works ↓
                 </a>
+              </>
+            ) : (
+              <>
+                <Link href="/signup">
+                  <Button
+                    size="lg"
+                    className="bg-carolina hover:bg-carolina/90 text-white"
+                  >
+                    Sign up to build my plan
+                    <ArrowRight className="size-4" strokeWidth={1.5} />
+                  </Button>
+                </Link>
+                <Link
+                  href="/preview"
+                  className="text-sm underline underline-offset-[5px] decoration-foreground/40 hover:decoration-foreground px-3 py-2 cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  See a sample day →
+                </Link>
               </>
             )}
           </div>
@@ -418,14 +461,16 @@ function ClosingCTA({
               </Link>
             </>
           ) : (
-            <Button
-              onClick={onStart}
-              size="lg"
-              className="bg-carolina text-white hover:bg-carolina/90 border border-carolina"
-            >
-              Start with my numbers
-              <ArrowRight className="size-4" strokeWidth={1.5} />
-            </Button>
+            <Link href="/signup">
+              <Button
+                size="lg"
+                className="bg-carolina text-white hover:bg-carolina/90 border border-carolina"
+              >
+                <Lock className="size-3.5" strokeWidth={1.5} />
+                Sign up to begin
+                <ArrowRight className="size-4" strokeWidth={1.5} />
+              </Button>
+            </Link>
           )}
         </div>
       </div>

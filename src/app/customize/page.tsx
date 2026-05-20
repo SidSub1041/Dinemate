@@ -71,9 +71,13 @@ export default function CustomizePage() {
   }, [status]);
 
   useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      router.replace("/signin");
+      return;
+    }
     if (!profileHydrated) return;
     if (profile) return;
-    if (status === "loading") return;
     if (status === "authenticated" && !bootstrapWindowClosed) return;
     router.replace("/");
   }, [profileHydrated, profile, status, bootstrapWindowClosed, router]);

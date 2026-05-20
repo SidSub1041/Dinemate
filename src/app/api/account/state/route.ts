@@ -71,6 +71,18 @@ export async function GET() {
               ? H
               : undefined
             : undefined,
+          schedule:
+            (profile.schedule as AccountState["profile"] extends infer P
+              ? P extends { schedule?: infer S }
+                ? S
+                : undefined
+              : undefined) ?? undefined,
+          mealPlan:
+            (profile.mealPlan as AccountState["profile"] extends infer P
+              ? P extends { mealPlan?: infer M }
+                ? M
+                : undefined
+              : undefined) ?? undefined,
         }
       : null,
     plan: (plan?.data ?? null) as AccountState["plan"],
@@ -173,6 +185,12 @@ export async function PUT(req: Request) {
           proteinPerKg: state.profile.proteinPerKg,
           fatPercent: state.profile.fatPercent,
           habits: state.profile.habits ?? {},
+          ...(state.profile.schedule
+            ? { schedule: state.profile.schedule }
+            : {}),
+          ...(state.profile.mealPlan
+            ? { mealPlan: state.profile.mealPlan }
+            : {}),
         },
         create: {
           userId,
@@ -187,6 +205,12 @@ export async function PUT(req: Request) {
           proteinPerKg: state.profile.proteinPerKg,
           fatPercent: state.profile.fatPercent,
           habits: state.profile.habits ?? {},
+          ...(state.profile.schedule
+            ? { schedule: state.profile.schedule }
+            : {}),
+          ...(state.profile.mealPlan
+            ? { mealPlan: state.profile.mealPlan }
+            : {}),
         },
       });
     } else {

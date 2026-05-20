@@ -91,9 +91,13 @@ export default function LogPage() {
   );
 
   useEffect(() => {
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      router.replace("/signin");
+      return;
+    }
     if (!profileHydrated) return;
     if (profile) return;
-    if (status === "loading") return;
     if (status === "authenticated" && !bootstrapWindowClosed) return;
     router.replace("/");
   }, [profileHydrated, profile, status, bootstrapWindowClosed, router]);
@@ -311,19 +315,39 @@ function MealLogRow({
     setFatG(entry?.fatG ?? 0);
   }, [entry]);
 
+  // Has-something check accepts either a normal meal (items present) OR an
+  // external meal that has at least one macro estimate. Previously the
+  // button was disabled for off-campus slots because items.length===0 and
+  // the entire row could never be logged from /log.
+  const plannedIsLoggable = !!(
+    planned &&
+    (planned.items.length > 0 ||
+      (planned.external &&
+        ((planned.external.calories ?? 0) > 0 ||
+          (planned.external.proteinG ?? 0) > 0 ||
+          (planned.external.carbsG ?? 0) > 0 ||
+          (planned.external.fatG ?? 0) > 0)))
+  );
+
+  const [justLogged, setJustLogged] = useState(false);
+
   const logPlanned = () => {
-    if (!planned) return;
+    if (!plannedIsLoggable || !planned) return;
+    // Falls back to the external block's macros if items.length===0.
+    const t = planned.totals;
     onSave({
       date,
       period,
       source: "planned",
       label: planned.location,
-      calories: planned.totals.calories,
-      proteinG: planned.totals.proteinG,
-      carbsG: planned.totals.totalCarbsG,
-      fatG: planned.totals.totalFatG,
+      calories: t.calories,
+      proteinG: t.proteinG,
+      carbsG: t.totalCarbsG,
+      fatG: t.totalFatG,
       loggedAt: Date.now(),
     });
+    setJustLogged(true);
+    setTimeout(() => setJustLogged(false), 1800);
   };
 
   const logSkipped = () => {
@@ -450,14 +474,21 @@ function MealLogRow({
                 <Button
                   size="sm"
                   onClick={logPlanned}
-                  disabled={!planned || planned.items.length === 0}
+                  disabled={!plannedIsLoggable}
                   className="bg-carolina hover:bg-carolina/90 text-white"
                 >
-                  Log the plan
+                  {justLogged ? (
+                    <>
+                      <Check className="size-3.5" strokeWidth={2} />
+                      Logged
+                    </>
+                  ) : (
+                    "Log the plan"
+                  )}
                 </Button>
-                {(!planned || planned.items.length === 0) && (
+                {!plannedIsLoggable && (
                   <span className="text-xs italic text-muted-foreground">
-                    No planned items to log.
+                    Nothing scheduled here yet.
                   </span>
                 )}
               </div>

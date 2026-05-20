@@ -44,6 +44,32 @@ export const profileSchema = z.object({
   proteinPerKg: z.number().min(0.8).max(3.5),
   fatPercent: z.number().min(0.15).max(0.5),
   habits: habitSchema,
+  schedule: z
+    .object({
+      wakeTime: z.string().regex(/^\d{2}:\d{2}$/),
+      sleepTime: z.string().regex(/^\d{2}:\d{2}$/),
+      breakfastAt: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+      lunchAt: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+      dinnerAt: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    })
+    .optional(),
+  mealPlan: z
+    .object({
+      tier: z.enum([
+        "all-access",
+        "block-200",
+        "block-160",
+        "block-120",
+        "block-100",
+        "off-campus-50",
+        "off-campus-35",
+        "flex-only",
+        "none",
+      ]),
+      weeklySwipes: z.number().int().min(0).max(50),
+      weeklyPlusSwipes: z.number().int().min(0).max(20),
+    })
+    .optional(),
 });
 
 export const customMealSchema = z.object({

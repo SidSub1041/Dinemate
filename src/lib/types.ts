@@ -41,6 +41,10 @@ export interface UserProfile {
   fatPercent: number;
   /** Optional: when omitted, treat as all-three-meals-on-campus. */
   habits?: HabitProfile;
+  /** Optional: when omitted, the optimizer uses default 8am/12:30/6pm windows. */
+  schedule?: ScheduleInfo;
+  /** Optional: when omitted, the optimizer treats all locations as eligible. */
+  mealPlan?: MealPlanInfo;
 }
 
 /**
@@ -101,6 +105,46 @@ export interface Location {
   slug: string;
   name: string;
   meals: Record<MealPeriod, MenuItem[]>;
+}
+
+/**
+ * How a UNC dining location is paid for.
+ *   - "swipe": regular meal swipe (Lenoir, Chase, Cafe 1789)
+ *   - "plus": PLUS swipe at retail; also accepts Flex
+ *   - "flex": Flex/dining dollars only (coffee shops, etc. — not used yet)
+ */
+export type PaymentType = "swipe" | "plus" | "flex";
+
+/** UNC meal plan tiers and their weekly capacity. */
+export type MealPlanTier =
+  | "all-access"
+  | "block-200"
+  | "block-160"
+  | "block-120"
+  | "block-100"
+  | "off-campus-50"
+  | "off-campus-35"
+  | "flex-only"
+  | "none";
+
+export interface MealPlanInfo {
+  tier: MealPlanTier;
+  /** Regular swipes remaining for the week-block-ahead view. */
+  weeklySwipes: number;
+  /** PLUS swipes remaining over the same window. */
+  weeklyPlusSwipes: number;
+}
+
+/** A user's wake/sleep + when their meals typically land. */
+export interface ScheduleInfo {
+  /** 24h "HH:MM" — wake-up time. */
+  wakeTime: string;
+  /** 24h "HH:MM" — sleep time. */
+  sleepTime: string;
+  /** When the user usually eats each kept meal. 24h "HH:MM". */
+  breakfastAt?: string;
+  lunchAt?: string;
+  dinnerAt?: string;
 }
 
 export interface MenuData {

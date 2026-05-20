@@ -97,6 +97,8 @@ model Profile {
   proteinPerKg      Float
   fatPercent        Float
   habits            Json     // { mealsOnCampus: string[], weeklyCampusMeals: string }
+  schedule          Json?    // ScheduleInfo or null (means use defaults)
+  mealPlan          Json?    // MealPlanInfo or null (means no plan configured)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

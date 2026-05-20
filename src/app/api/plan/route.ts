@@ -16,6 +16,35 @@ const habitSchema = z
   })
   .optional();
 
+const timeRegex = /^\d{2}:\d{2}$/;
+const scheduleSchema = z
+  .object({
+    wakeTime: z.string().regex(timeRegex),
+    sleepTime: z.string().regex(timeRegex),
+    breakfastAt: z.string().regex(timeRegex).optional(),
+    lunchAt: z.string().regex(timeRegex).optional(),
+    dinnerAt: z.string().regex(timeRegex).optional(),
+  })
+  .optional();
+
+const mealPlanSchema = z
+  .object({
+    tier: z.enum([
+      "all-access",
+      "block-200",
+      "block-160",
+      "block-120",
+      "block-100",
+      "off-campus-50",
+      "off-campus-35",
+      "flex-only",
+      "none",
+    ]),
+    weeklySwipes: z.number().int().min(0).max(50),
+    weeklyPlusSwipes: z.number().int().min(0).max(20),
+  })
+  .optional();
+
 const profileSchema = z.object({
   age: z.number().int().min(14).max(100),
   sex: z.enum(["male", "female"]),
@@ -47,6 +76,8 @@ const profileSchema = z.object({
   proteinPerKg: z.number().min(0.8).max(3.5),
   fatPercent: z.number().min(0.15).max(0.5),
   habits: habitSchema,
+  schedule: scheduleSchema,
+  mealPlan: mealPlanSchema,
 });
 
 const externalMealSchema = z.object({
