@@ -14,19 +14,12 @@ import {
   Moon,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import {
-  calculateTargets,
-  defaultFatPercent,
-  defaultProteinPerKg,
-  ftInToCm,
-  lbToKg,
-} from "@/lib/nutrition";
+
 import { cn, formatNumber } from "@/lib/utils";
 import type {
   MealPeriod,
   MealSelection,
   PlanResult,
-  UserProfile,
 } from "@/lib/types";
 
 const MEAL_META: Record<
@@ -43,19 +36,6 @@ const MEAL_META: Record<
  * can land on /preview, so the inputs need to produce a sensible plan
  * without any user input.
  */
-const DEMO_PROFILE: UserProfile = {
-  age: 20,
-  sex: "male",
-  heightCm: ftInToCm(5, 10),
-  weightKg: lbToKg(160),
-  activity: "moderate",
-  goal: "maintain",
-  diet: "none",
-  avoidAllergens: [],
-  proteinPerKg: defaultProteinPerKg("maintain"),
-  fatPercent: defaultFatPercent("maintain"),
-};
-
 export default function PreviewPage() {
   const router = useRouter();
   const { status } = useSession();
@@ -72,11 +52,10 @@ export default function PreviewPage() {
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/plan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profile: DEMO_PROFILE, ratings: {} }),
-        });
+        // Public teaser endpoint: the server fixes the profile and
+        // returns a single day, so the full week is never sent to a
+        // signed-out visitor.
+        const res = await fetch("/api/preview-plan", { method: "POST" });
         if (!res.ok) return;
         const data = (await res.json()) as PlanResult;
         if (!cancelled) setPlan(data);

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "@/auth";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import menuData from "@/data/menu.json";
 import { calculateTargets } from "@/lib/nutrition";
 import { buildPlan, type PinnedMap } from "@/lib/optimizer";
@@ -107,6 +109,17 @@ const requestSchema = z.union([
 ]);
 
 export async function POST(req: Request) {
+  // Authoritative auth boundary. Plan generation is CPU-heavy and returns
+  // a full week, so it is members-only; anonymous visitors get the
+  // deliberately truncated /api/preview-plan instead.
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
+  // 30 full rebuilds per 5 min per user is far above real usage.
+  const limited = rateLimit(`plan:${session.user.id}`, 30, 5 * 60_000);
+  if (!limited.ok) return tooManyRequests(limited.retryAfter);
+
   let payload: unknown;
   try {
     payload = await req.json();

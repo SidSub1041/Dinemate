@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { BCRYPT_ROUNDS } from "@/auth";
 
 const schema = z.object({
@@ -14,6 +15,10 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  // Account creation is the classic spam target: 5 per hour per IP.
+  const limited = rateLimit(`signup:${clientIp(req)}`, 5, 60 * 60_000);
+  if (!limited.ok) return tooManyRequests(limited.retryAfter);
+
   let raw: unknown;
   try {
     raw = await req.json();

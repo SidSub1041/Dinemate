@@ -244,38 +244,45 @@ export async function PUT(req: Request) {
         where: { userId, id: { in: toDelete } },
       });
     }
-    for (const m of state.customMeals.meals) {
-      await tx.customMeal.upsert({
-        where: { id: m.id },
-        update: {
-          name: m.name,
-          source: m.source,
-          station: m.station,
-          calories: m.calories,
-          proteinG: m.proteinG,
-          carbsG: m.carbsG,
-          fatG: m.fatG,
-          fiberG: m.fiberG ?? null,
-          diets: m.diets,
-          allergens: m.allergens,
-          notes: m.notes ?? null,
-        },
-        create: {
-          id: m.id,
-          userId,
-          name: m.name,
-          source: m.source,
-          station: m.station,
-          calories: m.calories,
-          proteinG: m.proteinG,
-          carbsG: m.carbsG,
-          fatG: m.fatG,
-          fiberG: m.fiberG ?? null,
-          diets: m.diets,
-          allergens: m.allergens,
-          notes: m.notes ?? null,
-        },
-      });
+    // Ownership-checked writes.
+    //
+    // `id` here is client-supplied and `CustomMeal.id` is a bare primary
+    // key, so upserting on `{ id }` alone would match ANY user's row: a
+    // caller who guessed another account's meal id could overwrite that
+    // account's meal (name, macros, and the 2000-char notes field). Resolve
+    // the current owner of every incoming id first and never write a row we
+    // do not own. Compare with the delete above, which was already scoped.
+    const incomingMeals = state.customMeals.meals;
+    const owners = incomingMeals.length
+      ? await tx.customMeal.findMany({
+          where: { id: { in: incomingMeals.map((m) => m.id) } },
+          select: { id: true, userId: true },
+        })
+      : [];
+    const ownerById = new Map(owners.map((o) => [o.id, o.userId]));
+
+    for (const m of incomingMeals) {
+      const owner = ownerById.get(m.id);
+      // Belongs to someone else — silently skip rather than clobber it.
+      if (owner !== undefined && owner !== userId) continue;
+      const fields = {
+        name: m.name,
+        source: m.source,
+        station: m.station,
+        calories: m.calories,
+        proteinG: m.proteinG,
+        carbsG: m.carbsG,
+        fatG: m.fatG,
+        fiberG: m.fiberG ?? null,
+        diets: m.diets,
+        allergens: m.allergens,
+        notes: m.notes ?? null,
+      };
+      if (owner === userId) {
+        await tx.customMeal.update({ where: { id: m.id }, data: fields });
+      } else {
+        await tx.customMeal.create({ data: { id: m.id, userId, ...fields } });
+      }
     }
 
     // Eaten entries: replace-all by (date,period).

@@ -106,15 +106,45 @@ export const ratingsSchema = z.record(
   z.enum(["love", "hate"])
 );
 
+/**
+ * Collection size caps.
+ *
+ * PUT /api/account/state writes every element of these collections inside
+ * one transaction, so an unbounded payload from a single authenticated
+ * caller turns into unbounded DB work (and a held transaction). These
+ * ceilings sit far above any real user — a heavy user has tens of custom
+ * meals and ~3 eaten entries per day — while capping the blast radius.
+ */
+export const MAX_CUSTOM_MEALS = 500;
+export const MAX_EATEN_ENTRIES = 3000; // ~3/day for ~3 years
+export const MAX_RATINGS = 5000;
+
+const boundedRecord = <T extends z.ZodTypeAny>(
+  schema: T,
+  max: number,
+  label: string
+) =>
+  z
+    .record(z.string(), schema)
+    .refine((r) => Object.keys(r).length <= max, {
+      message: `Too many ${label} (max ${max}).`,
+    });
+
 export const accountStateSchema = z.object({
   profile: profileSchema.nullable(),
   plan: z.any().nullable(),
-  customMeals: z.object({ meals: z.array(customMealSchema) }),
+  customMeals: z.object({
+    meals: z.array(customMealSchema).max(MAX_CUSTOM_MEALS),
+  }),
   eaten: z.object({
-    entries: z.record(z.string(), eatenEntrySchema),
+    entries: boundedRecord(eatenEntrySchema, MAX_EATEN_ENTRIES, "eaten entries"),
   }),
   ratings: z.object({
-    items: ratingsSchema,
+    items: boundedRecord(
+      z.enum(["love", "hate"]),
+      MAX_RATINGS,
+      "ratings"
+    ),
     updatedAt: z.number().int(),
   }),
 });

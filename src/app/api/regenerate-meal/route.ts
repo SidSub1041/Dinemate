@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { z } from "zod";
 import menuData from "@/data/menu.json";
 import { calculateTargets } from "@/lib/nutrition";
@@ -89,6 +91,14 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  }
+  // Swapping a single meal is cheap but scriptable; 120/5min per user.
+  const limited = rateLimit(`regen:${session.user.id}`, 120, 5 * 60_000);
+  if (!limited.ok) return tooManyRequests(limited.retryAfter);
+
   let payload: unknown;
   try {
     payload = await req.json();
