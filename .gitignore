@@ -36,8 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
-# claude session config (local launch settings)
-.claude/
+# claude session config (local launch settings; shared settings.json is tracked)
+.claude/*
+!.claude/settings.json
 
 # typescript
 *.tsbuildinfo
