@@ -62,10 +62,6 @@ scripts/
   scrape.ts                   CLI runner for the scraper
 ```
 
-## Acknowledgments
-
-Authored by **Sid Subramanian**. Developed with the assistance of **Claude** (Anthropic's Claude Code) as an AI pair-programming assistant.
-
 ## Notes
 
 Dinemate is an independent project. Not affiliated with the University of North Carolina at Chapel Hill or Carolina Dining Services. Calorie targets are estimates intended for general guidance, not medical advice.
