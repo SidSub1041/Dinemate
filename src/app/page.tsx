@@ -1,28 +1,28 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { ArrowRight, BookOpenText, Lock } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpenText,
+  CalendarDays,
+  Check,
+  Lock,
+  LogOut,
+  MapPin,
+  RefreshCw,
+  Shuffle,
+  ThumbsUp,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   OnboardingWizard,
   DEFAULT_FORM,
   type FormState,
 } from "@/components/OnboardingWizard";
-import {
-  HERO_FOOD,
-  STEP_TELL_US,
-  STEP_MATH,
-  STEP_EAT,
-  UNC_OLD_WELL,
-} from "@/lib/images";
-import {
-  useProfile,
-  useStoredPlan,
-} from "@/lib/use-app-data";
+import { useProfile, useStoredPlan } from "@/lib/use-app-data";
 
 type Phase = "landing" | "wizard";
 
@@ -136,8 +136,10 @@ function Landing({
         onStart={onStart}
         onOpenPlan={onOpenPlan}
       />
+      <StatStrip />
       <HowItWorks />
-      <CampusPanel />
+      <FeatureIndex />
+      <Locations />
       <ClosingCTA
         hasExistingPlan={hasExistingPlan}
         onStart={onStart}
@@ -159,197 +161,281 @@ function Hero({
   onOpenPlan: () => void;
 }) {
   return (
-    <section className="border-b border-foreground">
-      <div className="container mx-auto px-5 sm:px-8 grid grid-cols-1 lg:grid-cols-12 gap-x-12 gap-y-10 py-12 sm:py-20 items-center">
-        <div className="lg:col-span-7 space-y-7">
-          <div className="flex items-center gap-3">
-            <span className="size-2 rounded-full bg-carolina" />
-            <span className="eyebrow text-foreground/65">
-              {hasExistingPlan ? "Welcome back" : "Welcome — Spring 2026 Issue"}
-            </span>
-          </div>
+    <section>
+      <div className="container mx-auto px-5 sm:px-8 py-16 sm:py-24 space-y-7">
+        <div className="font-mono-tabular text-xs tracking-[0.18em] uppercase text-muted-foreground">
+          UNC Chapel Hill · Meal planner
+        </div>
 
-          <h1 className="font-display text-5xl sm:text-7xl lg:text-[5.5rem] font-medium tracking-tight leading-[0.95]">
-            {hasExistingPlan ? (
-              <>
-                Pick up where you{" "}
-                <span className="italic font-display-wonk">left off</span>.
-              </>
-            ) : (
-              <>
-                Welcome to{" "}
-                <span className="italic font-display-wonk">Dinemate</span>.
-              </>
-            )}
-          </h1>
+        <h1 className="font-display font-extrabold uppercase tracking-[-0.03em] leading-[0.88] text-6xl sm:text-8xl xl:text-[10rem]">
+          {hasExistingPlan ? (
+            <>
+              Back
+              <br />
+              <span className="text-carolina">at it.</span>
+            </>
+          ) : (
+            <>
+              Your week,
+              <br />
+              <span className="text-carolina">planned.</span>
+            </>
+          )}
+        </h1>
 
-          <p className="text-lg sm:text-xl leading-relaxed text-foreground/85 max-w-xl">
-            {hasExistingPlan
-              ? "Your saved plan, library and ratings are still here. Jump back in — or rebuild from scratch."
-              : "A friendly meal-planning companion for UNC students. Tell us about your week and your goals — we'll match them to what's actually being served at the dining halls today."}
-          </p>
+        <p className="text-lg sm:text-xl leading-relaxed text-muted-foreground max-w-xl">
+          {hasExistingPlan
+            ? "Your plan, library and ratings are right where you left them."
+            : "Seven days of real dining-hall meals, tuned to your macros."}
+        </p>
 
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-            {hasExistingPlan ? (
-              <>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center pt-1">
+          {hasExistingPlan ? (
+            <>
+              <Button
+                onClick={onOpenPlan}
+                size="lg"
+                className="bg-carolina hover:bg-carolina/90 text-white"
+              >
+                <BookOpenText className="size-4" strokeWidth={1.5} />
+                Open my plan
+              </Button>
+              <button
+                onClick={onStart}
+                className="text-sm underline underline-offset-[5px] decoration-foreground/40 hover:decoration-foreground px-3 py-2 cursor-pointer text-left"
+              >
+                Rebuild from scratch →
+              </button>
+            </>
+          ) : isAuthed ? (
+            <Button
+              onClick={onStart}
+              size="lg"
+              className="bg-carolina hover:bg-carolina/90 text-white"
+            >
+              Build my plan
+              <ArrowRight className="size-4" strokeWidth={1.5} />
+            </Button>
+          ) : (
+            <>
+              <Link href="/signup">
                 <Button
-                  onClick={onOpenPlan}
-                  size="lg"
-                  className="bg-carolina hover:bg-carolina/90 text-white"
-                >
-                  <BookOpenText className="size-4" strokeWidth={1.5} />
-                  Open my plan
-                </Button>
-                <button
-                  onClick={onStart}
-                  className="text-sm underline underline-offset-[5px] decoration-foreground/40 hover:decoration-foreground px-3 py-2 cursor-pointer text-left"
-                >
-                  Or rebuild from scratch →
-                </button>
-              </>
-            ) : isAuthed ? (
-              <>
-                <Button
-                  onClick={onStart}
                   size="lg"
                   className="bg-carolina hover:bg-carolina/90 text-white"
                 >
                   Build my plan
                   <ArrowRight className="size-4" strokeWidth={1.5} />
                 </Button>
-                <a
-                  href="#how-it-works"
-                  className="text-sm underline underline-offset-[5px] decoration-foreground/40 hover:decoration-foreground px-3 py-2 cursor-pointer"
-                >
-                  How it works ↓
-                </a>
-              </>
-            ) : (
-              <>
-                <Link href="/signup">
-                  <Button
-                    size="lg"
-                    className="bg-carolina hover:bg-carolina/90 text-white"
-                  >
-                    Sign up to build my plan
-                    <ArrowRight className="size-4" strokeWidth={1.5} />
-                  </Button>
-                </Link>
-                <Link
-                  href="/preview"
-                  className="text-sm underline underline-offset-[5px] decoration-foreground/40 hover:decoration-foreground px-3 py-2 cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  See a sample day →
-                </Link>
-              </>
-            )}
-          </div>
-
-          <div className="pt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-foreground/60" />
-              Real Carolina menus
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-foreground/60" />
-              Hits your macros
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-foreground/60" />
-              {hasExistingPlan ? "Your data, your device" : "60-second setup"}
-            </span>
-          </div>
-        </div>
-
-        <div className="lg:col-span-5">
-          <div className="image-treatment aspect-[4/5] sm:aspect-[3/4]">
-            <Image
-              src={HERO_FOOD.src}
-              alt={HERO_FOOD.alt}
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 40vw"
-              className="object-cover"
-            />
-          </div>
-          <div className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <span className="text-foreground/50">Photo</span>{" "}
-            <a
-              href={HERO_FOOD.creditUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground"
-            >
-              {HERO_FOOD.credit}
-            </a>
-          </div>
+              </Link>
+              <Link href="/preview">
+                <Button size="lg" variant="outline">
+                  See a sample
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-function HowItWorks() {
-  const steps = [
-    {
-      numeral: "I.",
-      title: "Tell us about you",
-      body: "Age, height, weight, sex — and how active you are. Standard inputs for a Mifflin-St Jeor BMR estimate. Sixty seconds, five screens.",
-      image: STEP_TELL_US,
-    },
-    {
-      numeral: "II.",
-      title: "We do the math",
-      body: "We turn that into a daily target — calories, protein, carbs, fat — adjusted for your goal. The same arithmetic a registered dietitian would write down.",
-      image: STEP_MATH,
-    },
-    {
-      numeral: "III.",
-      title: "Eat well at Lenoir & Chase",
-      body: "We pick two-to-four real menu items per meal that land within ten percent of your target. Swap, pin, log, or add your own meals on the Customize page.",
-      image: STEP_EAT,
-    },
-  ];
+const STATS: { big: string; label: string }[] = [
+  { big: "7 days", label: "Every week" },
+  { big: "11 spots", label: "Real CDS menus" },
+  { big: "3 meals", label: "Macro-tuned daily" },
+  { big: "60 sec", label: "To set up" },
+];
 
+function StatStrip() {
   return (
-    <section id="how-it-works" className="border-b border-foreground bg-paper">
-      <div className="container mx-auto px-5 sm:px-8 py-16 sm:py-24 space-y-12">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div className="space-y-2 max-w-xl">
-            <span className="eyebrow text-foreground/55">A quick tour</span>
-            <h2 className="font-display text-3xl sm:text-5xl font-medium tracking-tight leading-tight">
-              Three steps. Honest math.
-            </h2>
+    <section className="border-y-2 border-foreground">
+      <div className="container mx-auto px-5 sm:px-8 grid grid-cols-2 md:grid-cols-4">
+        {STATS.map((s, i) => (
+          <div
+            key={s.big}
+            className={`py-6 sm:py-7 pr-6 flex flex-col gap-1.5 ${
+              i > 0 ? "md:border-l md:border-hairline md:pl-8" : ""
+            }`}
+          >
+            <div className="font-display font-extrabold text-3xl sm:text-4xl tracking-[-0.02em]">
+              {s.big}
+            </div>
+            <div className="font-mono-tabular text-[11px] tracking-[0.16em] uppercase text-muted-foreground">
+              {s.label}
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground italic max-w-sm">
-            From your inputs to a real plate at Top of Lenoir or Chase.
-          </p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MiniChips() {
+  return (
+    <div className="flex flex-wrap gap-2 md:w-[420px] md:justify-end">
+      {["Lean bulk", "No gluten", "Block 200", "Lunch at 1", "Late dinner"].map(
+        (c) => (
+          <span
+            key={c}
+            className="border-[1.5px] border-foreground rounded-full px-3.5 py-2 text-[13px] font-medium"
+          >
+            {c}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
+
+function MiniMealCard() {
+  return (
+    <div className="border border-hairline rounded-lg bg-card p-4 space-y-2.5 md:w-[420px]">
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-carolina-deep">
+          <MapPin className="size-3.5" strokeWidth={2} />
+          Top of Lenoir
+        </span>
+        <span className="font-mono-tabular text-[11px] text-muted-foreground">
+          800 KCAL · 44P
+        </span>
+      </div>
+      <div className="space-y-1.5 text-[13px]">
+        {[
+          ["Cheddar Omelet", "290"],
+          ["Cinnamon French Toast", "360"],
+          ["Old Fashioned Oatmeal", "150"],
+        ].map(([name, kcal]) => (
+          <div key={name} className="flex justify-between">
+            <span>{name}</span>
+            <span className="font-mono-tabular text-muted-foreground">
+              {kcal}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniLogCard() {
+  return (
+    <div className="border border-hairline rounded-lg bg-card p-4 space-y-3 md:w-[420px]">
+      <div className="flex items-baseline gap-2">
+        <span className="font-display font-extrabold text-3xl">1,240</span>
+        <span className="font-mono-tabular text-[11px] text-muted-foreground">
+          OF 2,950 KCAL
+        </span>
+      </div>
+      <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+        <div className="h-2.5 w-[42%] bg-carolina rounded-full" />
+      </div>
+      <div className="flex items-center gap-2 text-[13px] font-medium text-success">
+        <Check className="size-3.5" strokeWidth={2.5} />
+        Breakfast logged
+      </div>
+    </div>
+  );
+}
+
+const STEPS: {
+  num: string;
+  title: string;
+  body: string;
+  visual: () => React.ReactNode;
+  reverse?: boolean;
+}[] = [
+  {
+    num: "01",
+    title: "Tell us you",
+    body: "Goal, diet, schedule, meal plan. One minute.",
+    visual: MiniChips,
+  },
+  {
+    num: "02",
+    title: "Get the week",
+    body: "Every meal from one spot. Hits your numbers.",
+    visual: MiniMealCard,
+    reverse: true,
+  },
+  {
+    num: "03",
+    title: "Log it",
+    body: "One tap per meal. Totals update live.",
+    visual: MiniLogCard,
+  },
+];
+
+function HowItWorks() {
+  return (
+    <section id="how-it-works">
+      <div className="container mx-auto px-5 sm:px-8 py-14 sm:py-20">
+        <div className="font-mono-tabular text-xs tracking-[0.18em] uppercase text-muted-foreground pb-2">
+          How it works
         </div>
-
-        <div className="carolina-rule" />
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-10 gap-y-12">
-          {steps.map((s) => (
-            <article key={s.numeral} className="space-y-4">
-              <div className="image-treatment aspect-[4/5]">
-                <Image
-                  src={s.image.src}
-                  alt={s.image.alt}
-                  fill
-                  sizes="(max-width: 768px) 100vw, 30vw"
-                  className="object-cover"
-                />
+        {STEPS.map((s, i) => {
+          const Visual = s.visual;
+          return (
+            <div
+              key={s.num}
+              className={`flex flex-col gap-8 py-9 md:items-center md:gap-16 ${
+                s.reverse ? "md:flex-row-reverse" : "md:flex-row"
+              } ${i < STEPS.length - 1 ? "border-b border-hairline" : ""}`}
+            >
+              <div className="flex-grow space-y-3">
+                <div className="font-mono-tabular text-[13px] font-medium text-carolina">
+                  {s.num}
+                </div>
+                <h3 className="font-display font-extrabold uppercase tracking-[-0.02em] text-4xl sm:text-5xl">
+                  {s.title}
+                </h3>
+                <p className="text-[15px] leading-relaxed text-muted-foreground max-w-sm">
+                  {s.body}
+                </p>
               </div>
-              <div className="font-display italic text-2xl text-carolina-deep/60">
-                {s.numeral}
-              </div>
-              <h3 className="font-display text-2xl sm:text-3xl font-medium tracking-tight leading-tight">
-                {s.title}
-              </h3>
-              <p className="text-sm text-foreground/80 leading-relaxed">
-                {s.body}
-              </p>
-            </article>
+              <Visual />
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+const FEATURES: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  title: string;
+  tag: string;
+}[] = [
+  { icon: Shuffle, title: "Swap meals", tag: "same macros" },
+  { icon: CalendarDays, title: "To calendar", tag: "week as events" },
+  { icon: Lock, title: "Pin favorites", tag: "survive rebuilds" },
+  { icon: ThumbsUp, title: "It learns", tag: "rate, improve" },
+  { icon: LogOut, title: "Eating out", tag: "day rebalances" },
+  { icon: RefreshCw, title: "Syncs", tag: "every device" },
+];
+
+function FeatureIndex() {
+  return (
+    <section className="bg-carolina-deep text-paper">
+      <div className="container mx-auto px-5 sm:px-8 py-12 sm:py-14 space-y-6">
+        <div className="font-mono-tabular text-xs tracking-[0.18em] uppercase text-carolina-soft">
+          Everything works
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-16">
+          {FEATURES.map((f, i) => (
+            <div
+              key={f.title}
+              className={`flex items-center gap-4 py-4 ${
+                i < FEATURES.length - 2 ? "border-b border-carolina-soft/20" : ""
+              } ${i === FEATURES.length - 2 ? "border-b md:border-b-0 border-carolina-soft/20" : ""}`}
+            >
+              <f.icon className="size-5 text-carolina shrink-0" strokeWidth={2} />
+              <span className="font-display font-extrabold uppercase text-lg sm:text-xl tracking-[-0.01em]">
+                {f.title}
+              </span>
+              <span className="ml-auto text-sm text-carolina-soft">{f.tag}</span>
+            </div>
           ))}
         </div>
       </div>
@@ -357,61 +443,49 @@ function HowItWorks() {
   );
 }
 
-function CampusPanel() {
+const SPOTS = [
+  "Top of Lenoir",
+  "Chase",
+  "Café 1789",
+  "Chick-fil-A",
+  "Subway",
+  "Bojangles",
+  "Med Deli",
+  "Alpaca",
+  "IP3",
+  "La Farm",
+  "Bandidos",
+];
+
+function Locations() {
   return (
-    <section className="border-b border-foreground">
-      <div className="container mx-auto px-5 sm:px-8 py-16 sm:py-24 grid grid-cols-1 lg:grid-cols-12 gap-x-12 gap-y-10 items-center">
-        <div className="lg:col-span-6">
-          <div className="image-treatment aspect-[5/4]">
-            <Image
-              src={UNC_OLD_WELL.src}
-              alt={UNC_OLD_WELL.alt}
-              fill
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-cover"
-            />
-          </div>
-          <div className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <span className="text-foreground/50">Photo</span>{" "}
-            <a
-              href={UNC_OLD_WELL.creditUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground"
+    <section>
+      <div className="container mx-auto px-5 sm:px-8 py-14 sm:py-20 space-y-7">
+        <h2 className="font-display font-extrabold uppercase tracking-[-0.03em] text-5xl sm:text-7xl">
+          Real menus.
+        </h2>
+        <div className="flex flex-wrap gap-2.5 max-w-4xl">
+          {SPOTS.map((spot) => (
+            <span
+              key={spot}
+              className="bg-carolina-tint border-[1.5px] border-carolina text-carolina-deep rounded-full px-4 py-2 text-sm font-semibold"
             >
-              {UNC_OLD_WELL.credit}
-            </a>
-          </div>
-        </div>
-        <div className="lg:col-span-6 space-y-5">
-          <div className="flex items-center gap-3">
-            <span className="size-2 rounded-full bg-carolina" />
-            <span className="eyebrow text-foreground/65">
-              Built for the Hill
+              {spot}
             </span>
-          </div>
-          <h2 className="font-display text-3xl sm:text-5xl font-medium tracking-tight leading-tight">
-            Made for students between Lenoir and the Old Well.
-          </h2>
-          <p className="text-base sm:text-lg text-foreground/85 leading-relaxed">
-            Dinemate started as a side project after a long stretch of
-            wandering Top of Lenoir wondering if a calorie-tracking app could
-            speak the dining hall&apos;s language. Now it does.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Every dish, every gram of protein, every serving size pulled
-            directly from{" "}
-            <a
-              href="https://dining.unc.edu"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-4 decoration-foreground/40 hover:decoration-foreground hover:text-foreground"
-            >
-              dining.unc.edu
-            </a>{" "}
-            — Carolina Dining Services&apos; own nutrition database.
-          </p>
+          ))}
         </div>
+        <p className="text-[15px] text-muted-foreground">
+          Scraped daily from{" "}
+          <a
+            href="https://dining.unc.edu"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-4 decoration-foreground/40 hover:decoration-foreground hover:text-foreground"
+          >
+            dining.unc.edu
+          </a>
+          .
+        </p>
       </div>
     </section>
   );
@@ -427,50 +501,38 @@ function ClosingCTA({
   onOpenPlan: () => void;
 }) {
   return (
-    <section className="bg-carolina-deep text-paper">
-      <div className="container mx-auto px-5 sm:px-8 py-16 sm:py-20 grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-6 items-end">
-        <div className="lg:col-span-8 space-y-3">
-          <span className="eyebrow text-paper/55">
-            {hasExistingPlan ? "Continue your week" : "Ready when you are"}
-          </span>
-          <h2 className="font-display text-3xl sm:text-5xl font-medium tracking-tight leading-tight">
-            Your week, <span className="italic">composed</span>.
+    <section className="pb-14 sm:pb-20">
+      <div className="container mx-auto px-5 sm:px-8">
+        <div className="bg-carolina rounded-lg px-8 py-12 sm:px-14 sm:py-14 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-8">
+          <h2 className="font-display font-extrabold uppercase tracking-[-0.03em] leading-[0.9] text-5xl sm:text-7xl text-white">
+            {hasExistingPlan ? "Keep going." : "Fuel up."}
           </h2>
-          <p className="text-paper/75 max-w-xl text-base sm:text-lg leading-relaxed">
-            {hasExistingPlan
-              ? "Open your plan, edit your profile, or log what you actually ate today."
-              : "Build your first plan in about a minute. Free, no account, no email."}
-          </p>
-        </div>
-        <div className="lg:col-span-4 flex lg:justify-end gap-3 flex-wrap">
           {hasExistingPlan ? (
-            <>
+            <div className="flex items-center gap-4 flex-wrap">
               <Button
                 onClick={onOpenPlan}
                 size="lg"
-                className="bg-carolina text-white hover:bg-carolina/90 border border-carolina"
+                className="bg-foreground text-paper hover:bg-foreground/90"
               >
                 Open my plan
                 <ArrowRight className="size-4" strokeWidth={1.5} />
               </Button>
               <Link
                 href="/log"
-                className="text-paper/85 hover:text-paper underline underline-offset-4 decoration-paper/40 hover:decoration-paper text-sm self-center"
+                className="text-white underline underline-offset-4 decoration-white/50 hover:decoration-white text-sm"
               >
                 Log today →
               </Link>
-            </>
+            </div>
           ) : (
-            <Link href="/signup">
-              <Button
-                size="lg"
-                className="bg-carolina text-white hover:bg-carolina/90 border border-carolina"
-              >
-                <Lock className="size-3.5" strokeWidth={1.5} />
-                Sign up to begin
-                <ArrowRight className="size-4" strokeWidth={1.5} />
-              </Button>
-            </Link>
+            <Button
+              onClick={onStart}
+              size="lg"
+              className="bg-foreground text-paper hover:bg-foreground/90"
+            >
+              Build my plan
+              <ArrowRight className="size-4" strokeWidth={1.5} />
+            </Button>
           )}
         </div>
       </div>

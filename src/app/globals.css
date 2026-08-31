@@ -32,8 +32,8 @@
   --color-warning: #b07d2f;
   --color-danger: #a83830;
 
-  --font-display: var(--font-fraunces);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage);
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
   --radius-sm: 1px;
@@ -78,15 +78,14 @@ body {
 
 .font-display {
   font-family: var(--font-display);
-  font-feature-settings: "ss01";
   font-optical-sizing: auto;
-  font-variation-settings: "SOFT" 50, "WONK" 0;
+  letter-spacing: -0.02em;
 }
 
+/* Bricolage has no WONK axis; the accent treatment is now color, not slant. */
 .font-display-wonk {
   font-family: var(--font-display);
   font-optical-sizing: auto;
-  font-variation-settings: "SOFT" 50, "WONK" 1;
 }
 
 .font-mono-tabular {

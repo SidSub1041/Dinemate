@@ -52,9 +52,8 @@ export default function SignInPage() {
     <div className="container mx-auto px-5 sm:px-8 py-14 sm:py-20 max-w-md">
       <div className="rule-double mb-8" />
       <span className="eyebrow text-foreground/55">Welcome back</span>
-      <h1 className="font-display text-4xl sm:text-5xl font-medium tracking-tight leading-[0.95] mt-3">
-        Sign in to your{" "}
-        <span className="italic font-display-wonk">account</span>.
+      <h1 className="font-display font-extrabold uppercase tracking-[-0.03em] text-5xl sm:text-6xl leading-[0.9] mt-3">
+        Welcome <span className="text-carolina">back.</span>
       </h1>
       <p className="text-sm text-foreground/75 mt-4 leading-relaxed">
         Your plan, library and ratings are waiting.

@@ -295,7 +295,7 @@ export function OnboardingWizard({
           {step === 1 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   The vitals.
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
@@ -387,7 +387,7 @@ export function OnboardingWizard({
           {step === 2 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   How hard are you moving?
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
@@ -413,7 +413,7 @@ export function OnboardingWizard({
           {step === 3 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   What&apos;s the brief?
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
@@ -439,7 +439,7 @@ export function OnboardingWizard({
           {step === 4 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   Anything we should leave off the plate?
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
@@ -489,7 +489,7 @@ export function OnboardingWizard({
           {step === 5 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   When are you actually eating on campus?
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
@@ -561,7 +561,7 @@ export function OnboardingWizard({
           {step === 6 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   Your actual schedule.
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
@@ -614,7 +614,7 @@ export function OnboardingWizard({
           {step === 7 && (
             <div className="space-y-8">
               <header>
-                <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+                <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
                   What&apos;s your meal plan?
                 </h2>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">

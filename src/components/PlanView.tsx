@@ -595,13 +595,11 @@ function PlanCover({
               The Plan · Issued for you
             </span>
           </div>
-          <h1 className="font-display text-5xl sm:text-7xl font-medium leading-[0.95] tracking-tight">
-            Your <span className="italic font-display-wonk">prescription</span>
-            <span className="text-carolina">.</span>
+          <h1 className="font-display font-extrabold uppercase tracking-[-0.03em] text-6xl sm:text-8xl leading-[0.88]">
+            This <span className="text-carolina">week.</span>
           </h1>
           <p className="text-paper/80 max-w-lg text-base sm:text-lg leading-relaxed">
-            Seven days of breakfast, lunch and dinner — pulled from real
-            Carolina Dining Services menus and tuned to your numbers.
+            Seven days from real Carolina Dining menus, tuned to your numbers.
           </p>
         </div>
 
@@ -738,7 +736,7 @@ function DayBreakdown({
         <div className="flex items-baseline justify-between">
           <div>
             <span className="eyebrow text-foreground/55">{day.day}</span>
-            <h3 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+            <h3 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
               By the numbers
             </h3>
           </div>
@@ -938,7 +936,7 @@ function MealArticle({
             </span>
           )}
         </div>
-        <h3 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight mt-2">
+        <h3 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight mt-2">
           {meta.label}
         </h3>
         <div className="text-xs italic text-muted-foreground mt-0.5">

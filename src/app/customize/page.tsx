@@ -107,9 +107,9 @@ export default function CustomizePage() {
         <div className="rule-double" />
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 pt-2">
           <div>
-            <span className="eyebrow text-foreground/60">Customize</span>
-            <h1 className="font-display text-4xl sm:text-6xl font-medium tracking-tight leading-[0.95]">
-              Make it <span className="italic">yours</span>.
+            <span className="eyebrow text-foreground/60">Settings · Synced</span>
+            <h1 className="font-display font-extrabold uppercase tracking-[-0.03em] text-6xl sm:text-8xl leading-[0.88]">
+              Dial it <span className="text-carolina">in.</span>
             </h1>
           </div>
           <p className="text-sm text-muted-foreground italic max-w-sm">

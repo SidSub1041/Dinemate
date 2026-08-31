@@ -8,9 +8,13 @@ import type { NextConfig } from "next";
  * proxy. Everything else is locked down: no plugins, no framing, no
  * arbitrary form posts, and all http subresources upgraded to https.
  */
+const isDev = process.env.NODE_ENV === "development";
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // Dev-only relaxations: React devtools need eval, and
+  // upgrade-insecure-requests breaks http://localhost subresources.
+  isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://images.unsplash.com https://upload.wikimedia.org",
   "font-src 'self' data:",
@@ -20,7 +24,7 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  "upgrade-insecure-requests",
+  ...(isDev ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");
 
 const SECURITY_HEADERS = [

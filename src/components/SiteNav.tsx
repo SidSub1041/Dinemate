@@ -30,7 +30,7 @@ export function SiteNav() {
     <header className="border-b border-foreground sticky top-0 z-30 bg-background/95 backdrop-blur-sm">
       <div className="container mx-auto px-4 sm:px-8 flex items-center justify-between py-3 gap-3 sm:gap-4">
         <Link href="/" className="flex items-baseline gap-3 group min-w-0">
-          <span className="font-display text-xl sm:text-2xl font-medium tracking-tight leading-none italic">
+          <span className="font-display text-xl sm:text-2xl font-extrabold tracking-[-0.02em] leading-none">
             Dinemate
           </span>
           <span className="hidden md:inline-block eyebrow text-foreground/45 truncate">

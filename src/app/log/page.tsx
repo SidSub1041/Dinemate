@@ -130,13 +130,12 @@ export default function LogPage() {
         <div className="rule-double" />
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 pt-2">
           <div>
-            <span className="eyebrow text-foreground/60">Today, on the record</span>
-            <h1 className="font-display text-4xl sm:text-6xl font-medium tracking-tight leading-[0.95]">
-              The eating <span className="italic">log</span>.
+            <span className="eyebrow text-foreground/60">On the record</span>
+            <h1 className="font-display font-extrabold uppercase tracking-[-0.03em] text-6xl sm:text-8xl leading-[0.88]">
+              Today<span className="text-carolina">.</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-3 max-w-xl leading-relaxed">
-              What you actually ate today. Adjust if you ate something different
-              from the plan — the totals reflect what really landed on your plate.
+              What actually landed on your plate. One tap per meal.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -208,8 +207,7 @@ export default function LogPage() {
       </section>
 
       <footer className="pt-8 border-t border-foreground/15 text-xs text-muted-foreground italic">
-        Logged entries stay on this device. When account sign-in lands next
-        session, your log syncs to your profile automatically.
+        Synced to your account. Same log on every device.
       </footer>
     </div>
   );

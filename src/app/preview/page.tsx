@@ -77,7 +77,7 @@ export default function PreviewPage() {
         <section>
           <div className="rule-double mb-6" />
           <span className="eyebrow text-foreground/55">A sample day</span>
-          <h2 className="font-display text-3xl sm:text-5xl font-medium tracking-tight leading-tight mt-2">
+          <h2 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-5xl leading-tight mt-2">
             Monday, as a demo.
           </h2>
           <p className="text-sm text-muted-foreground italic mt-2 max-w-xl">
@@ -120,10 +120,8 @@ function PreviewCover({ targets }: { targets?: PlanResult["targets"] }) {
             <span className="size-2 rounded-full bg-carolina" />
             <span className="eyebrow text-paper/65">Sample preview · No account</span>
           </div>
-          <h1 className="font-display text-5xl sm:text-7xl font-medium leading-[0.95] tracking-tight">
-            Here&apos;s a{" "}
-            <span className="italic font-display-wonk">taste</span>
-            <span className="text-carolina">.</span>
+          <h1 className="font-display font-extrabold uppercase tracking-[-0.03em] text-6xl sm:text-8xl leading-[0.88]">
+            A <span className="text-carolina">taste.</span>
           </h1>
           <p className="text-paper/80 max-w-lg text-base sm:text-lg leading-relaxed">
             A made-up day to show the format. Your real plan needs an
@@ -245,7 +243,7 @@ function SignUpGate() {
       <div className="border border-foreground bg-paper px-6 py-8 sm:px-10 sm:py-10 grid grid-cols-1 lg:grid-cols-12 gap-x-10 gap-y-6 items-center">
         <div className="lg:col-span-8 space-y-3">
           <span className="eyebrow text-foreground/55">The other six days</span>
-          <h3 className="font-display text-3xl sm:text-4xl font-medium tracking-tight leading-tight">
+          <h3 className="font-display font-extrabold uppercase tracking-[-0.02em] text-3xl sm:text-4xl leading-tight">
             Want the rest of the week?
           </h3>
           <p className="text-sm text-foreground/80 leading-relaxed max-w-xl">
